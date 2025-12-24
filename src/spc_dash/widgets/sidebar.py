@@ -44,7 +44,7 @@ class Sidebar(Vertical):
 
     DEFAULT_CSS = """
     Sidebar {
-        width: 24;
+        width: 30;
         background: $surface;
         border-right: solid $primary;
         padding: 1;
@@ -96,7 +96,7 @@ class Sidebar(Vertical):
             SidebarItem("Loading...", "watches-loading", indent=1, id="watches-placeholder"),
             # WFO category
             ListItem(Label("▾ WFO Products", classes="category-header"), id="cat-wfo"),
-            SidebarItem("Area Forecast Discussion", "wfo-afd", indent=1),
+            SidebarItem("AFD", "wfo-afd", indent=1),
             SidebarItem("Warnings", "wfo-warnings", indent=1),
             id="sidebar-list",
         )
