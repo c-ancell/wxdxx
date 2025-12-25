@@ -1,6 +1,7 @@
 """Widget for displaying weather product text."""
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.widgets import Static
 
@@ -8,10 +9,25 @@ from textual.widgets import Static
 class ProductView(VerticalScroll):
     """Scrollable view for displaying weather product text."""
 
+    can_focus = True
+
+    BINDINGS = [
+        Binding("j", "scroll_down", "Scroll Down", show=False),
+        Binding("k", "scroll_up", "Scroll Up", show=False),
+        Binding("g", "scroll_home", "Top", show=False),
+        Binding("G", "scroll_end", "Bottom", show=False),
+        Binding("d", "page_down", "Page Down", show=False),
+        Binding("u", "page_up", "Page Up", show=False),
+    ]
+
     DEFAULT_CSS = """
     ProductView {
         padding: 1 2;
         background: $surface;
+    }
+
+    ProductView:focus {
+        border: tall $primary;
     }
 
     ProductView .product-title {
@@ -94,3 +110,12 @@ class ProductView(VerticalScroll):
             meta_widget.display = False
 
         self.scroll_home()
+        self.focus()
+
+    def action_page_down(self) -> None:
+        """Scroll down by one page."""
+        self.scroll_page_down()
+
+    def action_page_up(self) -> None:
+        """Scroll up by one page."""
+        self.scroll_page_up()

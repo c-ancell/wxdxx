@@ -14,6 +14,7 @@ from .models.md import MesoscaleDiscussion
 from .models.outlook import OutlookDay
 from .models.watch import Watch
 from .models.wfo import DEFAULT_PRODUCT_TYPES, WFOProduct
+from .widgets.help_screen import HelpScreen
 from .widgets.product_view import ProductView
 from .widgets.sidebar import Sidebar
 from .widgets.wfo_input import WFOInputDialog
@@ -328,8 +329,12 @@ class SPCDash(App):
             await self._refresh_wfo_products(wfo_id)
 
     def action_help(self) -> None:
-        """Show help information."""
-        self.notify("SPC Dash - Press Q to quit, R to refresh")
+        """Toggle help screen."""
+        # Check if help screen is already showing (top of stack)
+        if self.screen_stack and isinstance(self.screen_stack[-1], HelpScreen):
+            self.pop_screen()
+        else:
+            self.push_screen(HelpScreen())
 
     async def action_view_day1(self) -> None:
         """Quick key to view Day 1 outlook."""
