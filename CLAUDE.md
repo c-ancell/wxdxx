@@ -11,6 +11,7 @@ A TUI application for viewing NWS text products from SPC, WPC, NHC, and local WF
 ```
 src/wxdxx/
 ├── app.py              # Main Textual application, ClockWidget
+├── cache.py            # TTL-based in-memory cache
 ├── config.py           # Configuration model and persistence (TOML)
 ├── api/
 │   ├── spc.py          # SPC website scraper (HTML parsing)
@@ -87,11 +88,12 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - Auto-refresh with configurable interval (default 60 seconds), "Refreshing..." indicator in status bar
 - WFO loading indicator in status bar shows which WFOs are being fetched
 - Tracked WFOs persist across app restarts (stored in ~/.config/wxdxx/config.toml)
+- TTL-based in-memory caching for all data (outlooks 5min, lists 2min, details 10-30min)
+- Auto-refresh uses cached data if not expired; manual refresh (r) clears all caches
 
 ## TODO / Not Yet Implemented (prioritized: quick wins first)
 
 ### Medium effort
-- Response caching
 - Convective Outlooks get reissued throughout the day. Most (if not all) have a line like "The next Day X outlook is scheduled by xxxxZ". Add a subtle UI element showing how long until the next outlook is issued. Also distinguish between "expiry" and "valid til" times in the status bar (expiry = product no longer relevant, valid til = end of forecast period but product may still be useful)
 
 ### Larger effort
