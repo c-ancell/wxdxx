@@ -19,7 +19,7 @@ from .models.wfo import DEFAULT_PRODUCT_TYPES, WFOProduct
 from .widgets.help_screen import HelpScreen
 from .widgets.product_view import ProductView
 from .widgets.sidebar import Sidebar
-from .widgets.wfo_input import WFOInputDialog
+from .widgets.wfo_input import WFODialogMode, WFOInputDialog
 
 
 def format_timedelta(td_seconds: float) -> str:
@@ -38,13 +38,17 @@ def format_timedelta(td_seconds: float) -> str:
 class ClockWidget(Static):
     """Widget displaying UTC and local time, plus product timing info."""
 
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._last_display: str = ""
+
     def on_mount(self) -> None:
         """Start the clock update interval."""
         self.update_clock()
         self.set_interval(1, self.update_clock)
 
     def update_clock(self) -> None:
-        """Update the clock display."""
+        """Update the clock display only if content has changed."""
         utc_now = datetime.now(timezone.utc)
         local_now = datetime.now()
 
@@ -81,7 +85,12 @@ class ClockWidget(Static):
                 parts.append(f"Expired: {format_timedelta(-until)} ago")
 
         parts.append(clock_str)
-        self.update(" | ".join(parts))
+        new_display = " | ".join(parts)
+
+        # Only trigger UI update if content actually changed
+        if new_display != self._last_display:
+            self._last_display = new_display
+            self.update(new_display)
 
 
 class WxDXX(App):
@@ -144,6 +153,11 @@ class WxDXX(App):
 
     AUTO_REFRESH_INTERVAL = 60  # seconds
 
+    # Cache size limits to prevent unbounded memory growth
+    MAX_CACHED_MDS = 50
+    MAX_CACHED_WATCHES = 50
+    MAX_CACHED_WFO_PRODUCTS = 100
+
     def __init__(self) -> None:
         super().__init__()
         self.spc_client = SPCClient()
@@ -159,6 +173,28 @@ class WxDXX(App):
         self._is_refreshing: bool = False
         # WFOs currently loading
         self._loading_wfos: set[str] = set()
+
+    def _cache_md(self, md_num: int, md: MesoscaleDiscussion) -> None:
+        """Add MD to cache, evicting oldest if at capacity."""
+        if len(self._cached_mds) >= self.MAX_CACHED_MDS:
+            # Remove oldest entry (first key in dict)
+            oldest_key = next(iter(self._cached_mds))
+            del self._cached_mds[oldest_key]
+        self._cached_mds[md_num] = md
+
+    def _cache_watch(self, watch_num: int, watch: Watch) -> None:
+        """Add watch to cache, evicting oldest if at capacity."""
+        if len(self._cached_watches) >= self.MAX_CACHED_WATCHES:
+            oldest_key = next(iter(self._cached_watches))
+            del self._cached_watches[oldest_key]
+        self._cached_watches[watch_num] = watch
+
+    def _cache_wfo_product(self, product_id: str, product: WFOProduct) -> None:
+        """Add WFO product to cache, evicting oldest if at capacity."""
+        if len(self._cached_wfo_products) >= self.MAX_CACHED_WFO_PRODUCTS:
+            oldest_key = next(iter(self._cached_wfo_products))
+            del self._cached_wfo_products[oldest_key]
+        self._cached_wfo_products[product_id] = product
 
     def _set_product_timing(
         self,
@@ -196,8 +232,11 @@ class WxDXX(App):
         self._update_clock_display()
         try:
             await self._refresh_sidebar_data()
-            for wfo_id in self._tracked_wfos:
-                await self._refresh_wfo_products(wfo_id)
+            # Refresh all WFOs in parallel
+            if self._tracked_wfos:
+                await asyncio.gather(
+                    *[self._refresh_wfo_products(wfo_id) for wfo_id in self._tracked_wfos]
+                )
 
             # Ensure indicator shows for minimum time
             elapsed = time.monotonic() - start_time
@@ -343,7 +382,7 @@ class WxDXX(App):
         product_view.show_loading(f"Fetching MD {md_num}...")
         try:
             md = await self.spc_client.get_md(md_num)
-            self._cached_mds[md_num] = md
+            self._cache_md(md_num, md)
             self._set_product_timing(issued=md.issued, expires=md.expires)
             product_view.show_product(md.title, md.text)
         except Exception as e:
@@ -367,7 +406,7 @@ class WxDXX(App):
             # Try fetching as severe thunderstorm first (more common)
             from .models.watch import WatchType
             watch = await self.spc_client.get_watch(watch_num, WatchType.SEVERE_THUNDERSTORM)
-            self._cached_watches[watch_num] = watch
+            self._cache_watch(watch_num, watch)
             self._set_product_timing(issued=watch.issued, expires=watch.expires)
             product_view.show_product(watch.title, watch.text)
         except Exception as e:
@@ -428,7 +467,7 @@ class WxDXX(App):
             self.notify("No WFOs are being tracked")
             return
 
-        self.push_screen(WFOInputDialog(), callback=self._on_remove_wfo_result)
+        self.push_screen(WFOInputDialog(WFODialogMode.REMOVE), callback=self._on_remove_wfo_result)
 
     def _on_remove_wfo_result(self, result: str | None) -> None:
         """Handle result from remove WFO dialog."""
@@ -468,21 +507,27 @@ class WxDXX(App):
         self._loading_wfos.add(wfo_id)
         self._update_clock_display()
 
+        async def fetch_product_type(product_type: str) -> list[tuple[str, str, str]]:
+            """Fetch products for a single type, returning tuples for sidebar."""
+            try:
+                products = await self.nws_client.get_products_by_type(
+                    wfo_id, product_type, limit=1
+                )
+                return [
+                    (p.id, p.product_type, p.issued.strftime("%H:%M") if p.issued else "")
+                    for p in products
+                ]
+            except Exception:
+                return []
+
         try:
             sidebar = self.query_one(Sidebar)
-            products_data = []
-
-            for product_type in DEFAULT_PRODUCT_TYPES:
-                try:
-                    products = await self.nws_client.get_products_by_type(
-                        wfo_id, product_type, limit=1
-                    )
-                    for product in products:
-                        time_str = product.issued.strftime("%H:%M") if product.issued else ""
-                        products_data.append((product.id, product.product_type, time_str))
-                except Exception:
-                    continue
-
+            # Fetch all product types in parallel
+            results = await asyncio.gather(
+                *[fetch_product_type(pt) for pt in DEFAULT_PRODUCT_TYPES]
+            )
+            # Flatten results
+            products_data = [item for sublist in results for item in sublist]
             sidebar.update_wfo_products(wfo_id, products_data)
         finally:
             self._loading_wfos.discard(wfo_id)
@@ -504,7 +549,7 @@ class WxDXX(App):
         product_view.show_loading("Fetching product...")
         try:
             product = await self.nws_client.get_product(product_id)
-            self._cached_wfo_products[product_id] = product
+            self._cache_wfo_product(product_id, product)
             self._set_product_timing(issued=product.issued)
             product_view.show_product(product.title, product.text or "No content")
         except Exception as e:

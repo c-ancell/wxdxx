@@ -5,6 +5,27 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+# NWS product type abbreviations and their meanings
+PRODUCT_ABBREVIATIONS = {
+    # Forecast products
+    "AFD": "Area Forecast Discussion",
+    "ZFP": "Zone Forecast Product",
+    "NOW": "Short Term Forecast",
+    # Hazard products
+    "HWO": "Hazardous Weather Outlook",
+    "SPS": "Special Weather Statement",
+    # Watch/warning products
+    "SVS": "Severe Weather Statement",
+    "SVR": "Severe Thunderstorm Warning",
+    "TOR": "Tornado Warning",
+    "FFW": "Flash Flood Warning",
+    "WSW": "Winter Storm Warning",
+    # SPC products
+    "MCD": "Mesoscale Discussion",
+    "WWA": "Watch/Warning/Advisory",
+    "PTS": "Probabilistic Outlook Points",
+}
+
 # Common product types to display in the sidebar
 DEFAULT_PRODUCT_TYPES = ["AFD", "HWO", "SPS", "NOW", "ZFP"]
 

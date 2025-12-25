@@ -1,9 +1,18 @@
 """WFO input dialog widget."""
 
+from enum import Enum
+
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label
+
+
+class WFODialogMode(Enum):
+    """Mode for the WFO input dialog."""
+
+    ADD = "add"
+    REMOVE = "remove"
 
 
 class WFOInputDialog(ModalScreen[str | None]):
@@ -51,9 +60,20 @@ class WFOInputDialog(ModalScreen[str | None]):
         ("escape", "cancel", "Cancel"),
     ]
 
+    def __init__(self, mode: WFODialogMode = WFODialogMode.ADD) -> None:
+        super().__init__()
+        self.mode = mode
+
     def compose(self) -> ComposeResult:
+        if self.mode == WFODialogMode.ADD:
+            title = "Add WFO"
+            button_label = "Add"
+        else:
+            title = "Remove WFO"
+            button_label = "Remove"
+
         with Vertical():
-            yield Label("Add WFO", classes="dialog-title")
+            yield Label(title, classes="dialog-title")
             yield Label(
                 "Enter 3-letter WFO ID (e.g., OUN, FWD, ICT):",
                 classes="dialog-help",
@@ -64,7 +84,7 @@ class WFOInputDialog(ModalScreen[str | None]):
                 id="wfo-input",
             )
             with Horizontal(classes="button-row"):
-                yield Button("Add", variant="primary", id="btn-add")
+                yield Button(button_label, variant="primary", id="btn-submit")
                 yield Button("Cancel", id="btn-cancel")
 
     def on_mount(self) -> None:
@@ -73,7 +93,7 @@ class WFOInputDialog(ModalScreen[str | None]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
-        if event.button.id == "btn-add":
+        if event.button.id == "btn-submit":
             self._submit()
         else:
             self.dismiss(None)

@@ -1,7 +1,7 @@
 """Help screen modal widget."""
 
 from textual.app import ComposeResult
-from textual.containers import Vertical
+from textual.containers import VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
@@ -32,6 +32,13 @@ HELP_TEXT = """\
   g          Jump to top
   G          Jump to bottom
 
+[bold]Product Abbreviations[/bold]
+  AFD        Area Forecast Discussion
+  ZFP        Zone Forecast Product
+  NOW        Short Term Forecast
+  HWO        Hazardous Weather Outlook
+  SPS        Special Weather Statement
+
 [dim]Press ? or Escape to close[/dim]
 """
 
@@ -44,7 +51,7 @@ class HelpScreen(ModalScreen[None]):
         align: center middle;
     }
 
-    HelpScreen > Vertical {
+    HelpScreen > VerticalScroll {
         width: 50;
         height: auto;
         max-height: 80%;
@@ -64,7 +71,7 @@ class HelpScreen(ModalScreen[None]):
     ]
 
     def compose(self) -> ComposeResult:
-        with Vertical():
+        with VerticalScroll():
             yield Static(HELP_TEXT, classes="help-content")
 
     def action_close(self) -> None:

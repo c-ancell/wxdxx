@@ -62,6 +62,9 @@ Run tests with:
 - Smoke tests catch regressions in app startup and widget composition
 - When modifying parser code, add or update corresponding fixture tests
 
+### TODO Tracking
+When the user asks to add a TODO, always add it to the "TODO / Not Yet Implemented" section in this file. You may also add inline `# TODO:` comments in the code if it helps with context, but this file is the canonical source for tracking all TODOs.
+
 ### Development Notes
 
 **Textual gotchas:**
@@ -83,9 +86,6 @@ Run tests with:
 
 ## TODO / Not Yet Implemented (prioritized: quick wins first)
 
-### Quick wins
-- Create a reference for NWS/NOAA product abbreviations
-
 ### Medium effort
 - Configuration file for default WFO
 - Response caching
@@ -94,6 +94,9 @@ Run tests with:
 ### Larger effort
 - Highlight sidebar items for new products using NWS color conventions (e.g., red/white for tornado warnings, purple/white for PDS, etc.)
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
+
+### Spikes / Research
+- Investigate why flood warnings/watches/statements and less-frequently issued WFO products don't appear when retrieving local text products (may be an issue with `DEFAULT_PRODUCT_TYPES` filtering, API query parameters, or how NWS categorizes products by issuing office)
 
 ### Architecture
 - Screens are stubs - all rendering happens in main app
