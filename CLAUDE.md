@@ -52,6 +52,7 @@ source .venv/bin/activate
 ### Quick wins
 - Rename app/title to better reflect its nature as a text product viewer for SPC and other NOAA centers/offices
 - Create a reference for NWS/NOAA product abbreviations
+- WFO loading indicator: When adding a WFO (e.g., "LUB"), it can take a while to load. The initial loading card disappears before data arrives, leaving no indication that loading is still in progress. Add a subtle indicator (e.g., in sidebar or status bar) to show data is still being fetched.
 
 ### Medium effort
 - Configuration file for default WFO
