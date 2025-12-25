@@ -227,7 +227,8 @@ class Sidebar(Vertical):
             item.remove()
 
         # If no WFOs left, restore the placeholder
-        if not listview.query(".wfo-header"):
+        remaining_wfos = list(listview.query(".wfo-header"))
+        if len(remaining_wfos) == 0:
             cat_wfo = self.query_one("#cat-wfo")
             placeholder = SidebarItem("Press 'w' to add", "wfo-hint", indent=1, id="wfo-placeholder")
             listview.mount(placeholder, after=cat_wfo)

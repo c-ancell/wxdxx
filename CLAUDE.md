@@ -73,13 +73,12 @@ Run tests with:
 - Scrolling in content view: j/k=line up/down, d/u=page down/up, g/G=top/bottom, arrows also work
 - Help screen (?) shows all keyboard shortcuts
 - Auto-refresh every 60 seconds with "Refreshing..." indicator in status bar
+- WFO loading indicator in status bar shows which WFOs are being fetched
 
 ## TODO / Not Yet Implemented (prioritized: quick wins first)
 
 ### Quick wins
 - Create a reference for NWS/NOAA product abbreviations
-- WFO loading indicator: When adding a WFO (e.g., "LUB"), it can take a while to load. The initial loading card disappears before data arrives, leaving no indication that loading is still in progress. Add a subtle indicator (e.g., in sidebar or status bar) to show data is still being fetched.
-- Removing all WFOs should restore the "Add a WFO" hint message in the sidebar (currently leaves the WFO products section empty)
 
 ### Medium effort
 - Configuration file for default WFO

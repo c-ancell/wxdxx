@@ -58,6 +58,11 @@ class ClockWidget(Static):
         if hasattr(app, "_is_refreshing") and app._is_refreshing:
             parts.append("[bold cyan]Refreshing...[/]")
 
+        # Show WFO loading indicator
+        if hasattr(app, "_loading_wfos") and app._loading_wfos:
+            wfos = ", ".join(sorted(app._loading_wfos))
+            parts.append(f"[bold cyan]Loading {wfos}...[/]")
+
         if hasattr(app, "_current_product_issued") and app._current_product_issued:
             issued = app._current_product_issued
             if issued.tzinfo is None:
@@ -152,6 +157,8 @@ class WxDXX(App):
         self._current_product_expires: datetime | None = None
         # Auto-refresh state
         self._is_refreshing: bool = False
+        # WFOs currently loading
+        self._loading_wfos: set[str] = set()
 
     def _set_product_timing(
         self,
@@ -458,21 +465,28 @@ class WxDXX(App):
 
     async def _refresh_wfo_products(self, wfo_id: str) -> None:
         """Refresh products for a specific WFO."""
-        sidebar = self.query_one(Sidebar)
-        products_data = []
+        self._loading_wfos.add(wfo_id)
+        self._update_clock_display()
 
-        for product_type in DEFAULT_PRODUCT_TYPES:
-            try:
-                products = await self.nws_client.get_products_by_type(
-                    wfo_id, product_type, limit=1
-                )
-                for product in products:
-                    time_str = product.issued.strftime("%H:%M") if product.issued else ""
-                    products_data.append((product.id, product.product_type, time_str))
-            except Exception:
-                continue
+        try:
+            sidebar = self.query_one(Sidebar)
+            products_data = []
 
-        sidebar.update_wfo_products(wfo_id, products_data)
+            for product_type in DEFAULT_PRODUCT_TYPES:
+                try:
+                    products = await self.nws_client.get_products_by_type(
+                        wfo_id, product_type, limit=1
+                    )
+                    for product in products:
+                        time_str = product.issued.strftime("%H:%M") if product.issued else ""
+                        products_data.append((product.id, product.product_type, time_str))
+                except Exception:
+                    continue
+
+            sidebar.update_wfo_products(wfo_id, products_data)
+        finally:
+            self._loading_wfos.discard(wfo_id)
+            self._update_clock_display()
 
     async def _load_wfo_product(self, product_id: str) -> None:
         """Load and display a WFO product."""
