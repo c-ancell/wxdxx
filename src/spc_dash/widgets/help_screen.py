@@ -11,8 +11,9 @@ HELP_TEXT = """\
 
 [bold]General[/bold]
   q          Quit application
-  r          Refresh all data
+  r          Manual refresh (data auto-refreshes every 60s)
   ?          Toggle this help screen
+  Tab        Switch focus between sidebar and content
 
 [bold]Navigation[/bold]
   1          View Day 1 Outlook

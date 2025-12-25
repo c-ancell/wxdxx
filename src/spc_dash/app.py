@@ -50,14 +50,18 @@ class ClockWidget(Static):
 
         # Check for product timing info from app
         app = self.app
-        timing_parts = []
+        parts = []
+
+        # Show refresh indicator
+        if hasattr(app, "_is_refreshing") and app._is_refreshing:
+            parts.append("[bold cyan]Refreshing...[/]")
 
         if hasattr(app, "_current_product_issued") and app._current_product_issued:
             issued = app._current_product_issued
             if issued.tzinfo is None:
                 issued = issued.replace(tzinfo=timezone.utc)
             since = (utc_now - issued).total_seconds()
-            timing_parts.append(f"Issued: {format_timedelta(since)} ago")
+            parts.append(f"Issued: {format_timedelta(since)} ago")
 
         if hasattr(app, "_current_product_expires") and app._current_product_expires:
             expires = app._current_product_expires
@@ -65,14 +69,12 @@ class ClockWidget(Static):
                 expires = expires.replace(tzinfo=timezone.utc)
             until = (expires - utc_now).total_seconds()
             if until > 0:
-                timing_parts.append(f"Expires: in {format_timedelta(until)}")
+                parts.append(f"Expires: in {format_timedelta(until)}")
             else:
-                timing_parts.append(f"Expired: {format_timedelta(-until)} ago")
+                parts.append(f"Expired: {format_timedelta(-until)} ago")
 
-        if timing_parts:
-            self.update(f"{' | '.join(timing_parts)} | {clock_str}")
-        else:
-            self.update(clock_str)
+        parts.append(clock_str)
+        self.update(" | ".join(parts))
 
 
 class SPCDash(App):
@@ -127,10 +129,13 @@ class SPCDash(App):
         Binding("w", "add_wfo", "Add WFO"),
         Binding("W", "remove_wfo", "Remove WFO", show=False),
         Binding("?", "help", "Help"),
+        Binding("tab", "toggle_focus", "Switch Panel", show=False),
         Binding("1", "view_day1", "Day 1", show=False),
         Binding("2", "view_day2", "Day 2", show=False),
         Binding("3", "view_day3", "Day 3", show=False),
     ]
+
+    AUTO_REFRESH_INTERVAL = 60  # seconds
 
     def __init__(self) -> None:
         super().__init__()
@@ -143,6 +148,8 @@ class SPCDash(App):
         # Current product timing for status bar display
         self._current_product_issued: datetime | None = None
         self._current_product_expires: datetime | None = None
+        # Auto-refresh state
+        self._is_refreshing: bool = False
 
     def _set_product_timing(
         self,
@@ -163,8 +170,23 @@ class SPCDash(App):
         yield Horizontal(Footer(), ClockWidget(), id="status-bar")
 
     async def on_mount(self) -> None:
-        """Initialize the app by fetching active products."""
-        self.run_worker(self._refresh_sidebar_data())
+        """Initialize the app by fetching active products and start auto-refresh."""
+        self.run_worker(self._refresh_all_data_with_indicator())
+        self.set_interval(self.AUTO_REFRESH_INTERVAL, self._auto_refresh)
+
+    def _auto_refresh(self) -> None:
+        """Trigger auto-refresh of all data."""
+        self.run_worker(self._refresh_all_data_with_indicator())
+
+    async def _refresh_all_data_with_indicator(self) -> None:
+        """Refresh all data with status bar indicator."""
+        self._is_refreshing = True
+        try:
+            await self._refresh_sidebar_data()
+            for wfo_id in self._tracked_wfos:
+                await self._refresh_wfo_products(wfo_id)
+        finally:
+            self._is_refreshing = False
 
     async def _refresh_sidebar_data(self) -> None:
         """Fetch MDs and watches and update the sidebar."""
@@ -319,14 +341,7 @@ class SPCDash(App):
         self._cached_mds.clear()
         self._cached_watches.clear()
         self._cached_wfo_products.clear()
-        self.notify("Refreshing...")
-        self.run_worker(self._refresh_all_data())
-
-    async def _refresh_all_data(self) -> None:
-        """Refresh all sidebar data including WFO products."""
-        await self._refresh_sidebar_data()
-        for wfo_id in self._tracked_wfos:
-            await self._refresh_wfo_products(wfo_id)
+        self.run_worker(self._refresh_all_data_with_indicator())
 
     def action_help(self) -> None:
         """Toggle help screen."""
@@ -335,6 +350,18 @@ class SPCDash(App):
             self.pop_screen()
         else:
             self.push_screen(HelpScreen())
+
+    def action_toggle_focus(self) -> None:
+        """Toggle focus between sidebar and content view."""
+        from textual.widgets import ListView
+
+        product_view = self.query_one(ProductView)
+        sidebar_list = self.query_one("#sidebar-list", ListView)
+
+        if product_view.has_focus:
+            sidebar_list.focus()
+        else:
+            product_view.focus()
 
     async def action_view_day1(self) -> None:
         """Quick key to view Day 1 outlook."""

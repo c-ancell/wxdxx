@@ -30,18 +30,26 @@ source .venv/bin/activate
 - Watches - listed in sidebar, click to view full text
 - UTC and local clocks in status bar for comparing product timestamps
 - Time since issuance and time until expiry shown in status bar when viewing products
-- Keyboard: q=quit, r=refresh, 1/2/3=Day 1/2/3 outlooks, ?=help
+- Keyboard: q=quit, r=refresh, 1/2/3=Day 1/2/3 outlooks, ?=help, Tab=switch panel
 - Scrolling in content view: j/k=line up/down, d/u=page down/up, g/G=top/bottom, arrows also work
 - Help screen (?) shows all keyboard shortcuts
+- Auto-refresh every 60 seconds with "Refreshing..." indicator in status bar
 
-## TODO / Not Yet Implemented
-- Auto-refresh data every 1 minute with status bar indicator when refresh is running
-- Extract issued/expires timestamps from MDs, Watches, and Outlooks (currently only WFO products have timing info; once extracted, set via `app._set_product_timing(issued=, expires=)` and ClockWidget will display them)
-- Highlight sidebar items for new products using NWS color conventions (e.g., red/white for tornado warnings, purple/white for PDS, etc.)
-- Response caching
-- Configuration file for default WFO
-- Keyboard shortcut for moving focus between main content window and navigation sidebar
-- Create a reference for NWS/NOAA product abbreviations
-- Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
+## TODO / Not Yet Implemented (prioritized: quick wins first)
+
+### Quick wins
 - Rename app/title to better reflect its nature as a text product viewer for SPC and other NOAA centers/offices
+- Create a reference for NWS/NOAA product abbreviations
+
+### Medium effort
+- Configuration file for default WFO
+- Response caching
+
+### Larger effort
+- Extract issued/expires timestamps from MDs, Watches, and Outlooks (currently only WFO products have timing info; once extracted, set via `app._set_product_timing(issued=, expires=)` and ClockWidget will display them)
+- Filter expired products from sidebar (depends on timestamp extraction)
+- Highlight sidebar items for new products using NWS color conventions (e.g., red/white for tornado warnings, purple/white for PDS, etc.)
+- Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
+
+### Architecture
 - Screens are stubs - all rendering happens in main app
