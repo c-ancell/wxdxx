@@ -191,12 +191,18 @@ class SPCDash(App):
     async def _refresh_sidebar_data(self) -> None:
         """Fetch MDs and watches and update the sidebar."""
         sidebar = self.query_one(Sidebar)
+        now = datetime.now(timezone.utc)
 
         # Fetch MDs
         try:
             mds = await self.spc_client.get_active_mds()
             self._cached_mds = {md.number: md for md in mds}
-            md_data = [(md.number, md.concerning) for md in mds]
+            # Filter out expired MDs
+            active_mds = [
+                md for md in mds
+                if md.expires is None or md.expires > now
+            ]
+            md_data = [(md.number, md.concerning) for md in active_mds]
             sidebar.update_mds(md_data)
         except Exception as e:
             sidebar.update_mds([])
@@ -206,7 +212,12 @@ class SPCDash(App):
         try:
             watches = await self.spc_client.get_active_watches()
             self._cached_watches = {w.number: w for w in watches}
-            watch_data = [(w.number, w.watch_type.value, w.is_pds) for w in watches]
+            # Filter out expired watches
+            active_watches = [
+                w for w in watches
+                if w.expires is None or w.expires > now
+            ]
+            watch_data = [(w.number, w.watch_type.value, w.is_pds) for w in active_watches]
             sidebar.update_watches(watch_data)
         except Exception as e:
             sidebar.update_watches([])
@@ -244,13 +255,13 @@ class SPCDash(App):
             self._set_product_timing()
             product_view.show_product(
                 "Mesoscale Discussions",
-                "No active Mesoscale Discussions at this time.",
+                "No current Mesoscale Discussions.",
             )
         elif item_id in ("watches-none", "watches-loading"):
             self._set_product_timing()
             product_view.show_product(
                 "Watches",
-                "No active Watches at this time.",
+                "No current Watches.",
             )
         elif item_id == "wfo-hint":
             self._set_product_timing()

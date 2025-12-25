@@ -40,7 +40,8 @@ source .venv/bin/activate
 - Mesoscale Discussions - listed in sidebar, click to view full text
 - Watches - listed in sidebar, click to view full text
 - UTC and local clocks in status bar for comparing product timestamps
-- Time since issuance and time until expiry shown in status bar when viewing products
+- Time since issuance and time until expiry shown in status bar when viewing products (MDs, Watches, Outlooks, and WFO products all have timestamps extracted)
+- Expired products (MDs, Watches) are automatically filtered from the sidebar
 - Keyboard: q=quit, r=refresh, 1/2/3=Day 1/2/3 outlooks, ?=help, Tab=switch panel
 - Scrolling in content view: j/k=line up/down, d/u=page down/up, g/G=top/bottom, arrows also work
 - Help screen (?) shows all keyboard shortcuts
@@ -55,10 +56,9 @@ source .venv/bin/activate
 ### Medium effort
 - Configuration file for default WFO
 - Response caching
+- Convective Outlooks get reissued throughout the day. Most (if not all) have a line like "The next Day X outlook is scheduled by xxxxZ". Add a subtle UI element showing how long until the next outlook is issued. Also distinguish between "expiry" and "valid til" times in the status bar (expiry = product no longer relevant, valid til = end of forecast period but product may still be useful)
 
 ### Larger effort
-- Extract issued/expires timestamps from MDs, Watches, and Outlooks (currently only WFO products have timing info; once extracted, set via `app._set_product_timing(issued=, expires=)` and ClockWidget will display them)
-- Filter expired products from sidebar (depends on timestamp extraction)
 - Highlight sidebar items for new products using NWS color conventions (e.g., red/white for tornado warnings, purple/white for PDS, etc.)
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 

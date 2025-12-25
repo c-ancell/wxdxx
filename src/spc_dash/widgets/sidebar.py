@@ -124,8 +124,8 @@ class Sidebar(Vertical):
         cat_index = listview._nodes.index(cat_mds)
 
         if not mds:
-            # No active MDs
-            item = SidebarItem("No active MDs", "mds-none", indent=1, id="mds-placeholder")
+            # No current MDs - don't set an ID, use class for cleanup
+            item = SidebarItem("None current", "mds-none", indent=1)
             item.add_class("md-item")
             listview.mount(item, after=cat_mds)
         else:
@@ -164,8 +164,8 @@ class Sidebar(Vertical):
         cat_watches = self.query_one("#cat-watches")
 
         if not watches:
-            # No active watches
-            item = SidebarItem("No active watches", "watches-none", indent=1, id="watches-placeholder")
+            # No current watches - don't set an ID, use class for cleanup
+            item = SidebarItem("None current", "watches-none", indent=1)
             item.add_class("watch-item")
             listview.mount(item, after=cat_watches)
         else:
