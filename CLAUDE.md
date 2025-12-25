@@ -11,6 +11,7 @@ A TUI application for viewing NWS text products from SPC, WPC, NHC, and local WF
 ```
 src/wxdxx/
 ├── app.py              # Main Textual application, ClockWidget
+├── config.py           # Configuration model and persistence (TOML)
 ├── api/
 │   ├── spc.py          # SPC website scraper (HTML parsing)
 │   └── nws.py          # NWS API client (api.weather.gov)
@@ -19,6 +20,7 @@ src/wxdxx/
 │   ├── sidebar.py      # Navigation sidebar with categories
 │   ├── product_view.py # Scrollable content display
 │   ├── help_screen.py  # Help modal with keyboard shortcuts
+│   ├── settings_screen.py # Settings modal for app configuration
 │   └── wfo_input.py    # WFO add/remove dialog
 └── screens/            # Screen stubs (not fully implemented)
 ```
@@ -78,16 +80,17 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - UTC and local clocks in status bar for comparing product timestamps
 - Time since issuance and time until expiry shown in status bar when viewing products (MDs, Watches, Outlooks, and WFO products all have timestamps extracted)
 - Expired products (MDs, Watches) are automatically filtered from the sidebar
-- Keyboard: q=quit, r=refresh, 1/2/3=Day 1/2/3 outlooks, ?=help, Tab=switch panel
+- Keyboard: q=quit, r=refresh, s=settings, 1/2/3=Day 1/2/3 outlooks, ?=help, Tab=switch panel
 - Scrolling in content view: j/k=line up/down, d/u=page down/up, g/G=top/bottom, arrows also work
 - Help screen (?) shows all keyboard shortcuts
-- Auto-refresh every 60 seconds with "Refreshing..." indicator in status bar
+- Settings screen (s) for configuring refresh interval
+- Auto-refresh with configurable interval (default 60 seconds), "Refreshing..." indicator in status bar
 - WFO loading indicator in status bar shows which WFOs are being fetched
+- Tracked WFOs persist across app restarts (stored in ~/.config/wxdxx/config.toml)
 
 ## TODO / Not Yet Implemented (prioritized: quick wins first)
 
 ### Medium effort
-- Configuration file for default WFO
 - Response caching
 - Convective Outlooks get reissued throughout the day. Most (if not all) have a line like "The next Day X outlook is scheduled by xxxxZ". Add a subtle UI element showing how long until the next outlook is issued. Also distinguish between "expiry" and "valid til" times in the status bar (expiry = product no longer relevant, valid til = end of forecast period but product may still be useful)
 

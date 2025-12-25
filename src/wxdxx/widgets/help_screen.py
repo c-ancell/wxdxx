@@ -12,6 +12,7 @@ HELP_TEXT = """\
 [bold]General[/bold]
   q          Quit application
   r          Manual refresh (data auto-refreshes every 60s)
+  s          Open settings
   ?          Toggle this help screen
   Tab        Switch focus between sidebar and content
 

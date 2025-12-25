@@ -12,12 +12,14 @@ from textual.widgets import Footer, Header, Static
 
 from .api.nws import NWSClient
 from .api.spc import SPCClient
+from .config import AppConfig
 from .models.md import MesoscaleDiscussion
 from .models.outlook import OutlookDay
 from .models.watch import Watch
 from .models.wfo import DEFAULT_PRODUCT_TYPES, WFOProduct
 from .widgets.help_screen import HelpScreen
 from .widgets.product_view import ProductView
+from .widgets.settings_screen import SettingsScreen
 from .widgets.sidebar import Sidebar
 from .widgets.wfo_input import WFODialogMode, WFOInputDialog
 
@@ -142,6 +144,7 @@ class WxDXX(App):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
+        Binding("s", "settings", "Settings"),
         Binding("w", "add_wfo", "Add WFO"),
         Binding("W", "remove_wfo", "Remove WFO", show=False),
         Binding("?", "help", "Help"),
@@ -160,11 +163,13 @@ class WxDXX(App):
 
     def __init__(self) -> None:
         super().__init__()
+        # Load configuration
+        self._config = AppConfig.load()
         self.spc_client = SPCClient()
         self.nws_client = NWSClient()
         self._cached_mds: dict[int, MesoscaleDiscussion] = {}
         self._cached_watches: dict[int, Watch] = {}
-        self._tracked_wfos: set[str] = set()
+        self._tracked_wfos: set[str] = set(self._config.tracked_wfos)
         self._cached_wfo_products: dict[str, WFOProduct] = {}
         # Current product timing for status bar display
         self._current_product_issued: datetime | None = None
@@ -173,6 +178,8 @@ class WxDXX(App):
         self._is_refreshing: bool = False
         # WFOs currently loading
         self._loading_wfos: set[str] = set()
+        # Timer handle for restart capability
+        self._refresh_timer = None
 
     def _cache_md(self, md_num: int, md: MesoscaleDiscussion) -> None:
         """Add MD to cache, evicting oldest if at capacity."""
@@ -217,7 +224,14 @@ class WxDXX(App):
     async def on_mount(self) -> None:
         """Initialize the app by fetching active products and start auto-refresh."""
         self.run_worker(self._refresh_all_data_with_indicator())
-        self.set_interval(self.AUTO_REFRESH_INTERVAL, self._auto_refresh)
+        self._refresh_timer = self.set_interval(
+            self._config.refresh_interval, self._auto_refresh
+        )
+
+        # Restore saved WFOs to sidebar
+        sidebar = self.query_one(Sidebar)
+        for wfo_id in self._tracked_wfos:
+            sidebar.add_wfo(wfo_id)
 
     def _auto_refresh(self) -> None:
         """Trigger auto-refresh of all data."""
@@ -428,6 +442,29 @@ class WxDXX(App):
         else:
             self.push_screen(HelpScreen())
 
+    def action_settings(self) -> None:
+        """Open settings screen."""
+        self.push_screen(
+            SettingsScreen(
+                current_refresh_interval=self._config.refresh_interval,
+                tracked_wfos=list(self._tracked_wfos),
+            ),
+            callback=self._on_settings_result,
+        )
+
+    def _on_settings_result(self, new_interval: int | None) -> None:
+        """Handle settings screen result."""
+        if new_interval is not None and new_interval != self._config.refresh_interval:
+            self._config.refresh_interval = new_interval
+            self._config.save()
+
+            # Restart the timer with new interval
+            if self._refresh_timer:
+                self._refresh_timer.stop()
+            self._refresh_timer = self.set_interval(new_interval, self._auto_refresh)
+
+            self.notify(f"Refresh interval set to {new_interval}s")
+
     def action_toggle_focus(self) -> None:
         """Toggle focus between sidebar and content view."""
         from textual.widgets import ListView
@@ -478,6 +515,11 @@ class WxDXX(App):
             to_remove = [k for k in self._cached_wfo_products if self._cached_wfo_products[k].wfo == result]
             for k in to_remove:
                 del self._cached_wfo_products[k]
+
+            # Auto-save config
+            self._config.tracked_wfos = list(self._tracked_wfos)
+            self._config.save()
+
             self.notify(f"Removed WFO {result}")
         elif result:
             self.notify(f"WFO {result} is not being tracked", severity="warning")
@@ -497,6 +539,11 @@ class WxDXX(App):
 
         self._tracked_wfos.add(wfo_id)
         self.query_one(Sidebar).add_wfo(wfo_id)
+
+        # Auto-save config
+        self._config.tracked_wfos = list(self._tracked_wfos)
+        self._config.save()
+
         self.notify(f"Added WFO {wfo_id}")
 
         # Fetch products
