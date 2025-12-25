@@ -35,6 +35,33 @@ source .venv/bin/activate
 .venv/bin/wxdxx
 ```
 
+## Development Workflow
+
+### Branching Strategy
+- Work directly on `main` for small changes (single file, minor fixes, documentation)
+- Create a feature branch from `main` when:
+  - The change requires significant modification of a file
+  - The change touches 3 or more files
+  - The feature is experimental or might break existing functionality
+- Branch naming: `feature/short-description` or `fix/short-description`
+
+### Testing
+Run tests with:
+```bash
+.venv/bin/pytest tests/ -v
+```
+
+**Test structure:**
+- `tests/test_app_smoke.py` - Smoke tests verifying the app starts and core widgets render
+- `tests/test_spc_parser.py` - Unit tests for SPC HTML parsing (uses fixtures)
+- `tests/fixtures/` - Sample HTML files for parser testing
+
+**Testing philosophy:**
+- Add tests incrementally as we work on the project
+- Prioritize tests for fragile code (HTML scrapers, external API parsing)
+- Smoke tests catch regressions in app startup and widget composition
+- When modifying parser code, add or update corresponding fixture tests
+
 ## Current Features
 - Convective Outlooks (Day 1-3) fetched from SPC
 - Mesoscale Discussions - listed in sidebar, click to view full text
