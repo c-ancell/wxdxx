@@ -10,12 +10,23 @@ A TUI application for viewing Storm Prediction Center (SPC) products and WFO tex
 ## Project Structure
 ```
 src/spc_dash/
-├── app.py              # Main Textual application
-├── api/spc.py          # SPC website client
-├── models/             # Pydantic models (outlook, md, watch)
-├── widgets/            # Sidebar, ProductView
+├── app.py              # Main Textual application, ClockWidget
+├── api/
+│   ├── spc.py          # SPC website scraper (HTML parsing)
+│   └── nws.py          # NWS API client (api.weather.gov)
+├── models/             # Pydantic models (outlook, md, watch, wfo)
+├── widgets/
+│   ├── sidebar.py      # Navigation sidebar with categories
+│   ├── product_view.py # Scrollable content display
+│   ├── help_screen.py  # Help modal with keyboard shortcuts
+│   └── wfo_input.py    # WFO add/remove dialog
 └── screens/            # Screen stubs (not fully implemented)
 ```
+
+## API Notes
+- SPC: Scrapes HTML from spc.noaa.gov (no official API)
+- NWS: Uses api.weather.gov with generous rate limits for typical usage
+- Both clients set proper User-Agent headers
 
 ## Running the App
 ```bash
