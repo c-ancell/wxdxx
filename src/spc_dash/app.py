@@ -1,11 +1,12 @@
 """Main SPC Dash application."""
 
 import re
+from datetime import datetime, timezone
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
-from textual.widgets import Footer, Header
+from textual.widgets import Footer, Header, Static
 
 from .api.nws import NWSClient
 from .api.spc import SPCClient
@@ -16,6 +17,23 @@ from .models.wfo import DEFAULT_PRODUCT_TYPES, WFOProduct
 from .widgets.product_view import ProductView
 from .widgets.sidebar import Sidebar
 from .widgets.wfo_input import WFOInputDialog
+
+
+class ClockWidget(Static):
+    """Widget displaying UTC and local time."""
+
+    def on_mount(self) -> None:
+        """Start the clock update interval."""
+        self.update_clock()
+        self.set_interval(1, self.update_clock)
+
+    def update_clock(self) -> None:
+        """Update the clock display."""
+        utc_now = datetime.now(timezone.utc)
+        local_now = datetime.now()
+        self.update(
+            f"UTC: {utc_now.strftime('%H:%M:%S')} | Local: {local_now.strftime('%H:%M:%S')}"
+        )
 
 
 class SPCDash(App):
@@ -49,6 +67,19 @@ class SPCDash(App):
         color: $text-muted;
         text-align: center;
     }
+
+    #status-bar {
+        dock: bottom;
+        height: 1;
+        background: $surface;
+    }
+
+    ClockWidget {
+        dock: right;
+        width: auto;
+        padding: 0 1;
+        color: $text-muted;
+    }
     """
 
     BINDINGS = [
@@ -78,7 +109,7 @@ class SPCDash(App):
             ProductView(),
             id="main-container",
         )
-        yield Footer()
+        yield Horizontal(Footer(), ClockWidget(), id="status-bar")
 
     async def on_mount(self) -> None:
         """Initialize the app by fetching active products."""
