@@ -62,6 +62,12 @@ Run tests with:
 - Smoke tests catch regressions in app startup and widget composition
 - When modifying parser code, add or update corresponding fixture tests
 
+### Development Notes
+
+**Textual gotchas:**
+- `DOMQuery` objects are truthy even when empty; use `len(list(query(...))) == 0` to check for no results
+- Status bar indicators (like "Refreshing...") need forced updates via `_update_clock_display()` when state changes - the 1-second polling interval is too slow to catch fast operations
+
 ## Current Features
 - Convective Outlooks (Day 1-3) fetched from SPC
 - Mesoscale Discussions - listed in sidebar, click to view full text
