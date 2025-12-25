@@ -82,10 +82,21 @@ class ClockWidget(Static):
             if expires.tzinfo is None:
                 expires = expires.replace(tzinfo=timezone.utc)
             until = (expires - utc_now).total_seconds()
+            # Use "Valid Until" for outlooks, "Expires" for MDs/Watches
+            is_outlook = getattr(app, "_current_product_is_outlook", False)
             if until > 0:
-                parts.append(f"Expires: in {format_timedelta(until)}")
+                label = "Valid Until" if is_outlook else "Expires"
+                parts.append(f"{label}: in {format_timedelta(until)}")
             else:
                 parts.append(f"Expired: {format_timedelta(-until)} ago")
+
+        if hasattr(app, "_current_product_next_scheduled") and app._current_product_next_scheduled:
+            next_sched = app._current_product_next_scheduled
+            if next_sched.tzinfo is None:
+                next_sched = next_sched.replace(tzinfo=timezone.utc)
+            until_next = (next_sched - utc_now).total_seconds()
+            if until_next > 0:
+                parts.append(f"Next: in {format_timedelta(until_next)}")
 
         parts.append(clock_str)
         new_display = " | ".join(parts)
@@ -198,6 +209,8 @@ class WxDXX(App):
         # Current product timing for status bar display
         self._current_product_issued: datetime | None = None
         self._current_product_expires: datetime | None = None
+        self._current_product_next_scheduled: datetime | None = None
+        self._current_product_is_outlook: bool = False
         # Auto-refresh state
         self._is_refreshing: bool = False
         # WFOs currently loading
@@ -209,10 +222,14 @@ class WxDXX(App):
         self,
         issued: datetime | None = None,
         expires: datetime | None = None,
+        next_scheduled: datetime | None = None,
+        is_outlook: bool = False,
     ) -> None:
         """Set the current product timing for status bar display."""
         self._current_product_issued = issued
         self._current_product_expires = expires
+        self._current_product_next_scheduled = next_scheduled
+        self._current_product_is_outlook = is_outlook
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -390,7 +407,12 @@ class WxDXX(App):
         cached = self._outlook_cache.get(cache_key)
         if cached:
             risk_str = f"Max Risk: {cached.max_risk.value}" if cached.max_risk else ""
-            self._set_product_timing(issued=cached.issued, expires=cached.valid_end)
+            self._set_product_timing(
+                issued=cached.issued,
+                expires=cached.valid_end,
+                next_scheduled=cached.next_scheduled,
+                is_outlook=True,
+            )
             product_view.show_product(cached.title, cached.text, risk_str)
             return
 
@@ -400,7 +422,12 @@ class WxDXX(App):
             outlook = await self.spc_client.get_outlook(day)
             self._outlook_cache.set(cache_key, outlook)
             risk_str = f"Max Risk: {outlook.max_risk.value}" if outlook.max_risk else ""
-            self._set_product_timing(issued=outlook.issued, expires=outlook.valid_end)
+            self._set_product_timing(
+                issued=outlook.issued,
+                expires=outlook.valid_end,
+                next_scheduled=outlook.next_scheduled,
+                is_outlook=True,
+            )
             product_view.show_product(outlook.title, outlook.text, risk_str)
         except Exception as e:
             self._set_product_timing()

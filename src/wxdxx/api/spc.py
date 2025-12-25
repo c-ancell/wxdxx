@@ -66,6 +66,7 @@ class SPCClient:
         # Extract timestamps
         issued = self._parse_outlook_issued(text)
         valid_start, valid_end = self._parse_valid_line(text)
+        next_scheduled = self._parse_next_scheduled(text)
 
         return ConvectiveOutlook(
             day=day,
@@ -75,6 +76,7 @@ class SPCClient:
             issued=issued,
             valid_start=valid_start,
             valid_end=valid_end,
+            next_scheduled=next_scheduled,
         )
 
     async def get_active_mds(self) -> list[MesoscaleDiscussion]:
@@ -405,6 +407,38 @@ class SPCClient:
             return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
         except ValueError:
             return None
+
+    def _parse_next_scheduled(self, text: str) -> datetime | None:
+        """Parse the next scheduled outlook time from outlook text.
+
+        Handles patterns like:
+        - "NOTE: THE NEXT DAY 1 OUTLOOK IS SCHEDULED BY 0100Z"
+        - "THE NEXT DAY 2 OUTLOOK IS SCHEDULED BY 0600Z"
+
+        Returns:
+            UTC datetime for next scheduled outlook, or None if not found
+        """
+        pattern = r"THE\s+NEXT\s+DAY\s+\d\s+OUTLOOK\s+IS\s+SCHEDULED\s+BY\s+(\d{4})Z"
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+
+        time_str = match.group(1)
+        try:
+            hour = int(time_str[:2])
+            minute = int(time_str[2:])
+        except ValueError:
+            return None
+
+        # Determine the date for this scheduled time
+        now = datetime.now(timezone.utc)
+        scheduled = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+        # If the scheduled time is in the past, it's for tomorrow
+        if scheduled <= now:
+            scheduled += timedelta(days=1)
+
+        return scheduled
 
     def _parse_watch_expires(
         self, text: str, issued: datetime | None

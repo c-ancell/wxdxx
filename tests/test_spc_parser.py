@@ -138,3 +138,40 @@ class TestSPCParser:
         result = client._clean_html(html)
 
         assert result == "Bold & italic <test>"
+
+    def test_parse_next_scheduled(self, client: SPCClient) -> None:
+        """Test parsing next scheduled outlook time."""
+        text = "NOTE: THE NEXT DAY 1 OUTLOOK IS SCHEDULED BY 2000Z"
+        result = client._parse_next_scheduled(text)
+
+        assert result is not None
+        assert result.hour == 20
+        assert result.minute == 0
+        assert result.tzinfo == timezone.utc
+
+    def test_parse_next_scheduled_day2(self, client: SPCClient) -> None:
+        """Test parsing next scheduled outlook for Day 2."""
+        text = "THE NEXT DAY 2 OUTLOOK IS SCHEDULED BY 0600Z"
+        result = client._parse_next_scheduled(text)
+
+        assert result is not None
+        assert result.hour == 6
+        assert result.minute == 0
+
+    def test_parse_next_scheduled_not_found(self, client: SPCClient) -> None:
+        """Test that missing next scheduled returns None."""
+        text = "Some outlook text without next scheduled info"
+        result = client._parse_next_scheduled(text)
+
+        assert result is None
+
+    def test_parse_next_scheduled_from_fixture(
+        self, client: SPCClient, spc_outlook_html: str
+    ) -> None:
+        """Test parsing next scheduled from full outlook fixture."""
+        text = client._extract_outlook_text(spc_outlook_html)
+        result = client._parse_next_scheduled(text)
+
+        assert result is not None
+        assert result.hour == 20
+        assert result.minute == 0

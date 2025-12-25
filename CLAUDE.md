@@ -90,11 +90,12 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - Tracked WFOs persist across app restarts (stored in ~/.config/wxdxx/config.toml)
 - TTL-based in-memory caching for all data (outlooks 5min, lists 2min, details 10-30min)
 - Auto-refresh uses cached data if not expired; manual refresh (r) clears all caches
+- Outlook status bar shows "Valid Until" (not "Expires") and "Next: in Xh Ym" for when the next outlook is scheduled
 
 ## TODO / Not Yet Implemented (prioritized: quick wins first)
 
-### Medium effort
-- Convective Outlooks get reissued throughout the day. Most (if not all) have a line like "The next Day X outlook is scheduled by xxxxZ". Add a subtle UI element showing how long until the next outlook is issued. Also distinguish between "expiry" and "valid til" times in the status bar (expiry = product no longer relevant, valid til = end of forecast period but product may still be useful)
+### Quick wins
+- Time display refinements: issued time only needs minute resolution (not seconds), "Valid Until" should maybe show "Valid: DDHHmm - DDHHmm" format, and clock widget should show today's day number (e.g., "25") in both UTC and local time
 
 ### Larger effort
 - Highlight sidebar items for new products using NWS color conventions (e.g., red/white for tornado warnings, purple/white for PDS, etc.)

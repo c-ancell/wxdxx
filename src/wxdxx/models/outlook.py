@@ -42,6 +42,7 @@ class ConvectiveOutlook(BaseModel):
     issued: datetime | None = None
     valid_start: datetime | None = None
     valid_end: datetime | None = None
+    next_scheduled: datetime | None = None
     text: str
     max_risk: RiskLevel | None = None
 
