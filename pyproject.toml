@@ -3,15 +3,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "spc-dash"
+name = "wxdxx"
 version = "0.1.0"
-description = "A TUI for reviewing Storm Prediction Center products and WFO text products"
+description = "A TUI for viewing NWS text products from SPC, WPC, NHC, and local WFOs"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [
     { name = "Colton Ancell" }
 ]
-keywords = ["weather", "spc", "tui", "terminal", "severe-weather"]
+keywords = ["weather", "nws", "spc", "wpc", "nhc", "tui", "terminal", "severe-weather"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -35,10 +35,10 @@ dev = [
 ]
 
 [project.scripts]
-spc-dash = "spc_dash.app:main"
+wxdxx = "wxdxx.app:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/spc_dash"]
+packages = ["src/wxdxx"]
 
 [tool.ruff]
 line-length = 100

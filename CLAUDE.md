@@ -1,6 +1,6 @@
-# SPC Dash
+# WxDXX
 
-A TUI application for viewing Storm Prediction Center (SPC) products and WFO text products.
+A TUI application for viewing NWS text products from SPC, WPC, NHC, and local WFOs.
 
 ## Tech Stack
 - Python 3.11+ with Textual (TUI framework)
@@ -9,7 +9,7 @@ A TUI application for viewing Storm Prediction Center (SPC) products and WFO tex
 
 ## Project Structure
 ```
-src/spc_dash/
+src/wxdxx/
 ├── app.py              # Main Textual application, ClockWidget
 ├── api/
 │   ├── spc.py          # SPC website scraper (HTML parsing)
@@ -32,7 +32,7 @@ src/spc_dash/
 ```bash
 source .venv/bin/activate
 .venv/bin/pip install .   # Required after code changes (editable install broken on Python 3.14)
-.venv/bin/spc-dash
+.venv/bin/wxdxx
 ```
 
 ## Current Features
@@ -50,9 +50,9 @@ source .venv/bin/activate
 ## TODO / Not Yet Implemented (prioritized: quick wins first)
 
 ### Quick wins
-- Rename app/title to better reflect its nature as a text product viewer for SPC and other NOAA centers/offices
 - Create a reference for NWS/NOAA product abbreviations
 - WFO loading indicator: When adding a WFO (e.g., "LUB"), it can take a while to load. The initial loading card disappears before data arrives, leaving no indication that loading is still in progress. Add a subtle indicator (e.g., in sidebar or status bar) to show data is still being fetched.
+- Removing all WFOs should restore the "Add a WFO" hint message in the sidebar (currently leaves the WFO products section empty)
 
 ### Medium effort
 - Configuration file for default WFO

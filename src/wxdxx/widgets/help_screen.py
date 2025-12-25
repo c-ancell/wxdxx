@@ -7,7 +7,7 @@ from textual.widgets import Static
 
 
 HELP_TEXT = """\
-[bold cyan]SPC Dash - Keyboard Shortcuts[/bold cyan]
+[bold cyan]WxDXX - Keyboard Shortcuts[/bold cyan]
 
 [bold]General[/bold]
   q          Quit application

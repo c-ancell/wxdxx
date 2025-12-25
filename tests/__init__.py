@@ -1,1 +1,1 @@
-"""Tests for SPC Dash."""
+"""Tests for WxDXX."""

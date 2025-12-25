@@ -1,4 +1,4 @@
-"""Main SPC Dash application."""
+"""Main WxDXX application."""
 
 import re
 from datetime import datetime, timezone
@@ -77,11 +77,11 @@ class ClockWidget(Static):
         self.update(" | ".join(parts))
 
 
-class SPCDash(App):
-    """TUI application for viewing SPC and WFO weather products."""
+class WxDXX(App):
+    """TUI application for viewing NWS text products."""
 
-    TITLE = "SPC Dash"
-    SUB_TITLE = "Storm Prediction Center Product Viewer"
+    TITLE = "WxDXX"
+    SUB_TITLE = "NWS Text Product Viewer"
 
     CSS = """
     Screen {
@@ -479,8 +479,8 @@ class SPCDash(App):
 
 
 def main() -> None:
-    """Entry point for SPC Dash."""
-    app = SPCDash()
+    """Entry point for WxDXX."""
+    app = WxDXX()
     app.run()
 
 
