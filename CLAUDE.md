@@ -35,7 +35,7 @@ source .venv/bin/activate
 ## TODO / Not Yet Implemented
 - Keyboard-based scrolling in main content window (currently requires mousepad)
 - Auto-refresh data every 1 minute with status bar indicator when refresh is running
-- Extract issued/expires timestamps from MDs, Watches, and Outlooks (currently only WFO products have timing info)
+- Extract issued/expires timestamps from MDs, Watches, and Outlooks (currently only WFO products have timing info; once extracted, set via `app._set_product_timing(issued=, expires=)` and ClockWidget will display them)
 - Highlight sidebar items for new products using NWS color conventions (e.g., red/white for tornado warnings, purple/white for PDS, etc.)
 - Response caching
 - Improve the help menu
