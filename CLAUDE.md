@@ -29,14 +29,17 @@ source .venv/bin/activate
 - Mesoscale Discussions - listed in sidebar, click to view full text
 - Watches - listed in sidebar, click to view full text
 - UTC and local clocks in status bar for comparing product timestamps
+- Time since issuance and time until expiry shown in status bar when viewing products
 - Keyboard: q=quit, r=refresh, 1/2/3=Day 1/2/3 outlooks
 
 ## TODO / Not Yet Implemented
-- Response caching
-- Configuration file for default WFO
-- Screens are stubs - all rendering happens in main app
-- Option to show only latest WFO product versions (e.g., hide older AFD amendments since offices typically append updates to the latest full AFD)
 - Keyboard-based scrolling in main content window (currently requires mousepad)
+- Auto-refresh data every 1 minute with status bar indicator when refresh is running
+- Extract issued/expires timestamps from MDs, Watches, and Outlooks (currently only WFO products have timing info)
+- Highlight sidebar items for new products using NWS color conventions (e.g., red/white for tornado warnings, purple/white for PDS, etc.)
+- Response caching
 - Improve the help menu
+- Configuration file for default WFO
+- Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 - Rename app/title to better reflect its nature as a text product viewer for SPC and other NOAA centers/offices
-- Show time since issuance and time until expiry in status bar when viewing products with valid times
+- Screens are stubs - all rendering happens in main app

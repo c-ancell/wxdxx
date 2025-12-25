@@ -19,8 +19,21 @@ from .widgets.sidebar import Sidebar
 from .widgets.wfo_input import WFOInputDialog
 
 
+def format_timedelta(td_seconds: float) -> str:
+    """Format seconds into a human-readable duration string."""
+    abs_seconds = abs(int(td_seconds))
+    hours, remainder = divmod(abs_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    elif minutes > 0:
+        return f"{minutes}m {seconds}s"
+    else:
+        return f"{seconds}s"
+
+
 class ClockWidget(Static):
-    """Widget displaying UTC and local time."""
+    """Widget displaying UTC and local time, plus product timing info."""
 
     def on_mount(self) -> None:
         """Start the clock update interval."""
@@ -31,9 +44,34 @@ class ClockWidget(Static):
         """Update the clock display."""
         utc_now = datetime.now(timezone.utc)
         local_now = datetime.now()
-        self.update(
-            f"UTC: {utc_now.strftime('%H:%M:%S')} | Local: {local_now.strftime('%H:%M:%S')}"
-        )
+
+        clock_str = f"UTC: {utc_now.strftime('%H:%M:%S')} | Local: {local_now.strftime('%H:%M:%S')}"
+
+        # Check for product timing info from app
+        app = self.app
+        timing_parts = []
+
+        if hasattr(app, "_current_product_issued") and app._current_product_issued:
+            issued = app._current_product_issued
+            if issued.tzinfo is None:
+                issued = issued.replace(tzinfo=timezone.utc)
+            since = (utc_now - issued).total_seconds()
+            timing_parts.append(f"Issued: {format_timedelta(since)} ago")
+
+        if hasattr(app, "_current_product_expires") and app._current_product_expires:
+            expires = app._current_product_expires
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=timezone.utc)
+            until = (expires - utc_now).total_seconds()
+            if until > 0:
+                timing_parts.append(f"Expires: in {format_timedelta(until)}")
+            else:
+                timing_parts.append(f"Expired: {format_timedelta(-until)} ago")
+
+        if timing_parts:
+            self.update(f"{' | '.join(timing_parts)} | {clock_str}")
+        else:
+            self.update(clock_str)
 
 
 class SPCDash(App):
@@ -101,6 +139,18 @@ class SPCDash(App):
         self._cached_watches: dict[int, Watch] = {}
         self._tracked_wfos: set[str] = set()
         self._cached_wfo_products: dict[str, WFOProduct] = {}
+        # Current product timing for status bar display
+        self._current_product_issued: datetime | None = None
+        self._current_product_expires: datetime | None = None
+
+    def _set_product_timing(
+        self,
+        issued: datetime | None = None,
+        expires: datetime | None = None,
+    ) -> None:
+        """Set the current product timing for status bar display."""
+        self._current_product_issued = issued
+        self._current_product_expires = expires
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -168,16 +218,19 @@ class SPCDash(App):
                 watch_num = int(watch_match.group(1))
                 await self._load_watch(watch_num)
         elif item_id in ("mds-none", "mds-loading"):
+            self._set_product_timing()
             product_view.show_product(
                 "Mesoscale Discussions",
                 "No active Mesoscale Discussions at this time.",
             )
         elif item_id in ("watches-none", "watches-loading"):
+            self._set_product_timing()
             product_view.show_product(
                 "Watches",
                 "No active Watches at this time.",
             )
         elif item_id == "wfo-hint":
+            self._set_product_timing()
             product_view.show_product(
                 "WFO Products",
                 "Press 'w' to add a Weather Forecast Office.\n\n"
@@ -185,6 +238,7 @@ class SPCDash(App):
             )
         elif item_id.startswith("wfo-") and "-header" in item_id:
             # WFO header clicked - show info about this WFO
+            self._set_product_timing()
             wfo_id = item_id.split("-")[1]
             product_view.show_product(
                 f"WFO {wfo_id}",
@@ -207,8 +261,10 @@ class SPCDash(App):
         try:
             outlook = await self.spc_client.get_outlook(day)
             risk_str = f"Max Risk: {outlook.max_risk.value}" if outlook.max_risk else ""
+            self._set_product_timing(issued=outlook.issued, expires=outlook.valid_end)
             product_view.show_product(outlook.title, outlook.text, risk_str)
         except Exception as e:
+            self._set_product_timing()
             product_view.show_error(str(e))
 
     async def _load_md(self, md_num: int) -> None:
@@ -218,6 +274,7 @@ class SPCDash(App):
         # Check cache first
         if md_num in self._cached_mds:
             md = self._cached_mds[md_num]
+            self._set_product_timing(issued=md.issued, expires=md.expires)
             product_view.show_product(md.title, md.text)
             return
 
@@ -226,8 +283,10 @@ class SPCDash(App):
         try:
             md = await self.spc_client.get_md(md_num)
             self._cached_mds[md_num] = md
+            self._set_product_timing(issued=md.issued, expires=md.expires)
             product_view.show_product(md.title, md.text)
         except Exception as e:
+            self._set_product_timing()
             product_view.show_error(f"Failed to fetch MD {md_num}: {e}")
 
     async def _load_watch(self, watch_num: int) -> None:
@@ -237,6 +296,7 @@ class SPCDash(App):
         # Check cache first
         if watch_num in self._cached_watches:
             watch = self._cached_watches[watch_num]
+            self._set_product_timing(issued=watch.issued, expires=watch.expires)
             product_view.show_product(watch.title, watch.text)
             return
 
@@ -247,8 +307,10 @@ class SPCDash(App):
             from .models.watch import WatchType
             watch = await self.spc_client.get_watch(watch_num, WatchType.SEVERE_THUNDERSTORM)
             self._cached_watches[watch_num] = watch
+            self._set_product_timing(issued=watch.issued, expires=watch.expires)
             product_view.show_product(watch.title, watch.text)
         except Exception as e:
+            self._set_product_timing()
             product_view.show_error(f"Failed to fetch Watch {watch_num}: {e}")
 
     def action_refresh(self) -> None:
@@ -339,7 +401,7 @@ class SPCDash(App):
         for product_type in DEFAULT_PRODUCT_TYPES:
             try:
                 products = await self.nws_client.get_products_by_type(
-                    wfo_id, product_type, limit=3
+                    wfo_id, product_type, limit=1
                 )
                 for product in products:
                     time_str = product.issued.strftime("%H:%M") if product.issued else ""
@@ -357,6 +419,7 @@ class SPCDash(App):
         if product_id in self._cached_wfo_products:
             product = self._cached_wfo_products[product_id]
             if product.text:
+                self._set_product_timing(issued=product.issued)
                 product_view.show_product(product.title, product.text)
                 return
 
@@ -365,8 +428,10 @@ class SPCDash(App):
         try:
             product = await self.nws_client.get_product(product_id)
             self._cached_wfo_products[product_id] = product
+            self._set_product_timing(issued=product.issued)
             product_view.show_product(product.title, product.text or "No content")
         except Exception as e:
+            self._set_product_timing()
             product_view.show_error(f"Failed to fetch product: {e}")
 
 
