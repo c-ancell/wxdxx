@@ -7,12 +7,15 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header
 
+from .api.nws import NWSClient
 from .api.spc import SPCClient
 from .models.md import MesoscaleDiscussion
 from .models.outlook import OutlookDay
 from .models.watch import Watch
+from .models.wfo import DEFAULT_PRODUCT_TYPES, WFOProduct
 from .widgets.product_view import ProductView
 from .widgets.sidebar import Sidebar
+from .widgets.wfo_input import WFOInputDialog
 
 
 class SPCDash(App):
@@ -51,6 +54,8 @@ class SPCDash(App):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
+        Binding("w", "add_wfo", "Add WFO"),
+        Binding("W", "remove_wfo", "Remove WFO", show=False),
         Binding("?", "help", "Help"),
         Binding("1", "view_day1", "Day 1", show=False),
         Binding("2", "view_day2", "Day 2", show=False),
@@ -60,8 +65,11 @@ class SPCDash(App):
     def __init__(self) -> None:
         super().__init__()
         self.spc_client = SPCClient()
+        self.nws_client = NWSClient()
         self._cached_mds: dict[int, MesoscaleDiscussion] = {}
         self._cached_watches: dict[int, Watch] = {}
+        self._tracked_wfos: set[str] = set()
+        self._cached_wfo_products: dict[str, WFOProduct] = {}
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -103,6 +111,7 @@ class SPCDash(App):
     async def on_unmount(self) -> None:
         """Clean up when app closes."""
         await self.spc_client.close()
+        await self.nws_client.close()
 
     async def on_sidebar_item_selected(self, event: Sidebar.ItemSelected) -> None:
         """Handle sidebar item selection."""
@@ -137,16 +146,27 @@ class SPCDash(App):
                 "Watches",
                 "No active Watches at this time.",
             )
-        elif item_id == "wfo-afd":
+        elif item_id == "wfo-hint":
             product_view.show_product(
-                "Area Forecast Discussion",
-                "WFO product support coming soon.\n\nThis will allow you to view AFDs from local forecast offices.",
+                "WFO Products",
+                "Press 'w' to add a Weather Forecast Office.\n\n"
+                "Enter a 3-letter WFO ID (e.g., OUN, FWD, ICT) to track products from that office.",
             )
-        elif item_id == "wfo-warnings":
+        elif item_id.startswith("wfo-") and "-header" in item_id:
+            # WFO header clicked - show info about this WFO
+            wfo_id = item_id.split("-")[1]
             product_view.show_product(
-                "Warnings",
-                "WFO warnings support coming soon.\n\nThis will display active warnings from local forecast offices.",
+                f"WFO {wfo_id}",
+                f"Products from Weather Forecast Office {wfo_id}.\n\n"
+                f"Press 'W' to remove this WFO.",
             )
+        elif item_id.startswith("wfo-"):
+            # WFO product selected - format: wfo-{WFO}-{product_id}
+            parts = item_id.split("-", 2)
+            if len(parts) == 3:
+                wfo_id, product_id = parts[1], parts[2]
+                if product_id not in ("loading", "none"):
+                    await self._load_wfo_product(product_id)
 
     async def _load_outlook(self, day: OutlookDay) -> None:
         """Load and display a convective outlook."""
@@ -204,8 +224,15 @@ class SPCDash(App):
         """Refresh the sidebar data."""
         self._cached_mds.clear()
         self._cached_watches.clear()
+        self._cached_wfo_products.clear()
         self.notify("Refreshing...")
-        self.run_worker(self._refresh_sidebar_data())
+        self.run_worker(self._refresh_all_data())
+
+    async def _refresh_all_data(self) -> None:
+        """Refresh all sidebar data including WFO products."""
+        await self._refresh_sidebar_data()
+        for wfo_id in self._tracked_wfos:
+            await self._refresh_wfo_products(wfo_id)
 
     def action_help(self) -> None:
         """Show help information."""
@@ -222,6 +249,94 @@ class SPCDash(App):
     async def action_view_day3(self) -> None:
         """Quick key to view Day 3 outlook."""
         await self._load_outlook(OutlookDay.DAY3)
+
+    def action_add_wfo(self) -> None:
+        """Show dialog to add a WFO."""
+        self.push_screen(WFOInputDialog(), callback=self._on_add_wfo_result)
+
+    def _on_add_wfo_result(self, result: str | None) -> None:
+        """Handle result from add WFO dialog."""
+        if result:
+            self.run_worker(self._add_wfo(result))
+
+    def action_remove_wfo(self) -> None:
+        """Show dialog to remove a WFO."""
+        if not self._tracked_wfos:
+            self.notify("No WFOs are being tracked")
+            return
+
+        self.push_screen(WFOInputDialog(), callback=self._on_remove_wfo_result)
+
+    def _on_remove_wfo_result(self, result: str | None) -> None:
+        """Handle result from remove WFO dialog."""
+        if result and result in self._tracked_wfos:
+            self._tracked_wfos.remove(result)
+            self.query_one(Sidebar).remove_wfo(result)
+            # Clear cached products for this WFO
+            to_remove = [k for k in self._cached_wfo_products if self._cached_wfo_products[k].wfo == result]
+            for k in to_remove:
+                del self._cached_wfo_products[k]
+            self.notify(f"Removed WFO {result}")
+        elif result:
+            self.notify(f"WFO {result} is not being tracked", severity="warning")
+
+    async def _add_wfo(self, wfo_id: str) -> None:
+        """Add a WFO and fetch its products."""
+        if wfo_id in self._tracked_wfos:
+            self.notify(f"WFO {wfo_id} is already being tracked")
+            return
+
+        # Validate WFO exists
+        self.notify(f"Validating WFO {wfo_id}...")
+        is_valid = await self.nws_client.validate_wfo(wfo_id)
+        if not is_valid:
+            self.notify(f"Invalid WFO ID: {wfo_id}", severity="error")
+            return
+
+        self._tracked_wfos.add(wfo_id)
+        self.query_one(Sidebar).add_wfo(wfo_id)
+        self.notify(f"Added WFO {wfo_id}")
+
+        # Fetch products
+        self.run_worker(self._refresh_wfo_products(wfo_id))
+
+    async def _refresh_wfo_products(self, wfo_id: str) -> None:
+        """Refresh products for a specific WFO."""
+        sidebar = self.query_one(Sidebar)
+        products_data = []
+
+        for product_type in DEFAULT_PRODUCT_TYPES:
+            try:
+                products = await self.nws_client.get_products_by_type(
+                    wfo_id, product_type, limit=3
+                )
+                for product in products:
+                    time_str = product.issued.strftime("%H:%M") if product.issued else ""
+                    products_data.append((product.id, product.product_type, time_str))
+            except Exception:
+                continue
+
+        sidebar.update_wfo_products(wfo_id, products_data)
+
+    async def _load_wfo_product(self, product_id: str) -> None:
+        """Load and display a WFO product."""
+        product_view = self.query_one(ProductView)
+
+        # Check cache
+        if product_id in self._cached_wfo_products:
+            product = self._cached_wfo_products[product_id]
+            if product.text:
+                product_view.show_product(product.title, product.text)
+                return
+
+        # Fetch from API
+        product_view.show_loading("Fetching product...")
+        try:
+            product = await self.nws_client.get_product(product_id)
+            self._cached_wfo_products[product_id] = product
+            product_view.show_product(product.title, product.text or "No content")
+        except Exception as e:
+            product_view.show_error(f"Failed to fetch product: {e}")
 
 
 def main() -> None:

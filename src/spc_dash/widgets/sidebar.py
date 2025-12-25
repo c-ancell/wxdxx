@@ -96,8 +96,7 @@ class Sidebar(Vertical):
             SidebarItem("Loading...", "watches-loading", indent=1, id="watches-placeholder"),
             # WFO category
             ListItem(Label("▾ WFO Products", classes="category-header"), id="cat-wfo"),
-            SidebarItem("AFD", "wfo-afd", indent=1),
-            SidebarItem("Warnings", "wfo-warnings", indent=1),
+            SidebarItem("Press 'w' to add", "wfo-hint", indent=1, id="wfo-placeholder"),
             id="sidebar-list",
         )
 
@@ -178,6 +177,95 @@ class Sidebar(Vertical):
                 item = SidebarItem(label, f"watch-{watch_num}", indent=1)
                 item.add_class("watch-item")
                 listview.mount(item, after=cat_watches)
+
+    def add_wfo(self, wfo_id: str) -> None:
+        """Add a new WFO section to the sidebar."""
+        listview = self.query_one("#sidebar-list", ListView)
+
+        # Remove the placeholder hint if it exists
+        try:
+            placeholder = self.query_one("#wfo-placeholder")
+            placeholder.remove()
+        except Exception:
+            pass
+
+        # Find the WFO category header
+        cat_wfo = self.query_one("#cat-wfo")
+
+        # Find where to insert (after existing WFO sections, alphabetically)
+        insert_after = cat_wfo
+        for item in listview.query(".wfo-header"):
+            if item.id and item.id < f"wfo-{wfo_id}-header":
+                insert_after = item
+                # Also skip past all items for this WFO
+                for sub in listview.query(f".wfo-{item.id.split('-')[1]}-item"):
+                    insert_after = sub
+
+        # Create WFO header
+        wfo_header = SidebarItem(wfo_id, f"wfo-{wfo_id}-header", indent=1, id=f"wfo-{wfo_id}-header")
+        wfo_header.add_class("wfo-header")
+        listview.mount(wfo_header, after=insert_after)
+
+        # Add loading placeholder
+        loading = SidebarItem("Loading...", f"wfo-{wfo_id}-loading", indent=2)
+        loading.add_class(f"wfo-{wfo_id}-item")
+        listview.mount(loading, after=wfo_header)
+
+    def remove_wfo(self, wfo_id: str) -> None:
+        """Remove a WFO and its products from the sidebar."""
+        listview = self.query_one("#sidebar-list", ListView)
+
+        # Remove the header
+        try:
+            header = self.query_one(f"#wfo-{wfo_id}-header")
+            header.remove()
+        except Exception:
+            pass
+
+        # Remove all items for this WFO
+        for item in list(listview.query(f".wfo-{wfo_id}-item")):
+            item.remove()
+
+        # If no WFOs left, restore the placeholder
+        if not listview.query(".wfo-header"):
+            cat_wfo = self.query_one("#cat-wfo")
+            placeholder = SidebarItem("Press 'w' to add", "wfo-hint", indent=1, id="wfo-placeholder")
+            listview.mount(placeholder, after=cat_wfo)
+
+    def update_wfo_products(
+        self,
+        wfo_id: str,
+        products: list[tuple[str, str, str]],  # (product_id, product_type, time_str)
+    ) -> None:
+        """Update the products list for a specific WFO.
+
+        Args:
+            wfo_id: The WFO identifier
+            products: List of (product_id, product_type, time_str) tuples
+        """
+        listview = self.query_one("#sidebar-list", ListView)
+
+        # Remove existing items for this WFO
+        for item in list(listview.query(f".wfo-{wfo_id}-item")):
+            item.remove()
+
+        # Find the WFO header
+        try:
+            wfo_header = self.query_one(f"#wfo-{wfo_id}-header")
+        except Exception:
+            return  # WFO not added yet
+
+        if not products:
+            item = SidebarItem("No products", f"wfo-{wfo_id}-none", indent=2)
+            item.add_class(f"wfo-{wfo_id}-item")
+            listview.mount(item, after=wfo_header)
+        else:
+            # Add products in reverse order (so they appear in order)
+            for product_id, product_type, time_str in reversed(products):
+                label = f"{product_type} {time_str}" if time_str else product_type
+                item = SidebarItem(label, f"wfo-{wfo_id}-{product_id}", indent=2)
+                item.add_class(f"wfo-{wfo_id}-item")
+                listview.mount(item, after=wfo_header)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle selection in the ListView."""
