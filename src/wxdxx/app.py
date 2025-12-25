@@ -1,6 +1,8 @@
 """Main WxDXX application."""
 
+import asyncio
 import re
+import time
 from datetime import datetime, timezone
 
 from textual.app import App, ComposeResult
@@ -180,13 +182,31 @@ class WxDXX(App):
 
     async def _refresh_all_data_with_indicator(self) -> None:
         """Refresh all data with status bar indicator."""
+        min_display_time = 2.0  # Show "Refreshing..." for at least 2 seconds
+        start_time = time.monotonic()
+
         self._is_refreshing = True
+        self._update_clock_display()
         try:
             await self._refresh_sidebar_data()
             for wfo_id in self._tracked_wfos:
                 await self._refresh_wfo_products(wfo_id)
+
+            # Ensure indicator shows for minimum time
+            elapsed = time.monotonic() - start_time
+            if elapsed < min_display_time:
+                await asyncio.sleep(min_display_time - elapsed)
         finally:
             self._is_refreshing = False
+            self._update_clock_display()
+
+    def _update_clock_display(self) -> None:
+        """Force immediate update of the clock widget."""
+        try:
+            clock = self.query_one(ClockWidget)
+            clock.update_clock()
+        except Exception:
+            pass  # Widget may not be mounted yet
 
     async def _refresh_sidebar_data(self) -> None:
         """Fetch MDs and watches and update the sidebar."""
