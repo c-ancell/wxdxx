@@ -693,7 +693,9 @@ class WxDXX(App):
         self._loading_wfos.add(wfo_id)
         self._update_clock_display()
 
-        async def fetch_product_type(product_type: str) -> list[tuple[str, str, str]]:
+        async def fetch_product_type(
+            product_type: str,
+        ) -> list[tuple[str, str, str, datetime | None]]:
             """Fetch products for a single type, returning tuples for sidebar."""
             cache_key = f"{wfo_id}:{product_type}"
 
@@ -707,9 +709,19 @@ class WxDXX(App):
                 products = await self.nws_client.get_products_by_type(
                     wfo_id, product_type, limit=1
                 )
+                # Filter out expired products (SPS will have expires populated)
+                now = datetime.now(timezone.utc)
+                active_products = [
+                    p for p in products if p.expires is None or p.expires > now
+                ]
                 result = [
-                    (p.id, p.product_type, p.issued.strftime("%H:%M") if p.issued else "")
-                    for p in products
+                    (
+                        p.id,
+                        p.product_type,
+                        p.issued.strftime("%H:%M") if p.issued else "",
+                        p.expires,
+                    )
+                    for p in active_products
                 ]
                 self._wfo_list_cache.set(cache_key, result)
                 return result

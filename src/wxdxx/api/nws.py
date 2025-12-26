@@ -1,6 +1,7 @@
 """NWS API client for fetching WFO products."""
 
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 
 import httpx
 
@@ -91,6 +92,19 @@ class NWSClient:
                     name=item.get("productName"),
                 )
             )
+
+        # For SPS products, fetch full text to parse UGC expiry
+        # (NWS API doesn't populate expirationTime for text products)
+        if product_type.upper() == "SPS":
+            for product in products:
+                try:
+                    full_product = await self.get_product(product.id)
+                    product.text = full_product.text
+                    product.expires = self._parse_ugc_expiry(full_product.text or "")
+                except Exception:
+                    # If fetch fails, leave expires as None (product will show without countdown)
+                    pass
+
         return products
 
     async def get_product(self, product_id: str) -> WFOProduct:
@@ -199,4 +213,62 @@ class NWSClient:
         try:
             return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
         except ValueError:
+            return None
+
+    def _parse_ugc_expiry(self, text: str) -> datetime | None:
+        """Extract expiry datetime from UGC header in product text.
+
+        UGC (Universal Geographic Code) headers contain zone codes and an expiry
+        time in DDHHMM format (day of month, hour, minute in UTC).
+
+        Examples:
+            CAZ103-104-106-261800-     -> Day 26, 18:00 UTC
+            TXZ001-002-003-
+            261800-                    -> Day 26, 18:00 UTC (multi-line)
+
+        Args:
+            text: Full product text containing UGC header
+
+        Returns:
+            Expiry datetime in UTC, or None if parsing fails
+        """
+        if not text:
+            return None
+
+        # UGC expiry is a 6-digit number followed by a dash at end of line
+        # It appears in the first few lines of the product
+        # Pattern: look for DDHHMM- where DD is day, HH is hour, MM is minute
+        match = re.search(r"(\d{6})-\s*$", text[:500], re.MULTILINE)
+        if not match:
+            return None
+
+        try:
+            ddhhmm = match.group(1)
+            day = int(ddhhmm[:2])
+            hour = int(ddhhmm[2:4])
+            minute = int(ddhhmm[4:6])
+
+            # Build datetime using current year/month
+            # Don't try to roll over months - if the expiry is in the past,
+            # that's correct (the product is expired). The filtering logic
+            # in app.py will handle removing expired products.
+            now = datetime.now(timezone.utc)
+
+            # Handle edge case: if we're on day 1-2 and expiry is day 30-31,
+            # it's likely from the previous month (product issued end of last month)
+            if now.day <= 2 and day >= 28:
+                # Roll back to previous month
+                if now.month == 1:
+                    expiry = datetime(now.year - 1, 12, day, hour, minute, 0, tzinfo=timezone.utc)
+                else:
+                    # Need to handle months with different day counts
+                    try:
+                        expiry = datetime(now.year, now.month - 1, day, hour, minute, 0, tzinfo=timezone.utc)
+                    except ValueError:
+                        return None  # Day doesn't exist in previous month
+            else:
+                expiry = now.replace(day=day, hour=hour, minute=minute, second=0, microsecond=0)
+
+            return expiry
+        except (ValueError, IndexError):
             return None
