@@ -99,16 +99,18 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - Outlook status bar shows "Next: in Xh Ym" for when the next outlook is scheduled
 - Sidebar items color-coded using NWS conventions: red for tornado watches, yellow for SVR, magenta for PDS; outlook risk levels (TSTM→HIGH); MD watch probability; WFO warnings (TOR/SVR/FFW/WSW)
 - Sidebar shows time-until-expiry for MDs and Watches (e.g., "MD 2457 (2h 15m)", "TOR 127 (4h 30m)")
+- Status bar shows "Refreshed: Xm ago" timestamp that updates dynamically
 
 ## TODO / Not Yet Implemented
 
 ### Larger effort
 - Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
+- Status bar cleanup: information (refresh time, product timing, clocks) is starting to overlap with quick-key commands. Consider leaving only "?" in the footer and moving all other hotkey shortcuts into the help menu (verify they're all documented there first)
 
 ### Spikes / Research
-- Investigate why flood warnings/watches/statements and less-frequently issued WFO products don't appear when retrieving local text products (may be an issue with `DEFAULT_PRODUCT_TYPES` filtering, API query parameters, or how NWS categorizes products by issuing office)
-- SPS products seem to stick around in the sidebar well after they are relevant (may need expiration handling or shorter cache TTL for certain product types)
+- Investigate why flood warnings/watches/statements, locally-issued advisories, and other less-frequently issued WFO products don't appear when retrieving local text products (may be an issue with `DEFAULT_PRODUCT_TYPES` filtering, API query parameters, or how NWS categorizes products by issuing office)
+- SPS products seem to stick around in the sidebar well after they are relevant (18+ hours old observed) - investigate whether these products have expiry times that can be parsed, or if we need shorter cache TTL / age-based filtering
 
 ### Architecture
 - Screens are stubs - all rendering happens in main app

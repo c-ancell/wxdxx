@@ -62,6 +62,13 @@ class ClockWidget(Static):
         # Show refresh indicator
         if hasattr(app, "_is_refreshing") and app._is_refreshing:
             parts.append("[bold cyan]Refreshing...[/]")
+        elif hasattr(app, "_last_refresh_time") and app._last_refresh_time:
+            # Show time since last refresh (only when not actively refreshing)
+            since_refresh = (utc_now - app._last_refresh_time).total_seconds()
+            if since_refresh < 60:
+                parts.append("Refreshed: <1m ago")
+            else:
+                parts.append(f"Refreshed: {format_timedelta(since_refresh)} ago")
 
         # Show WFO loading indicator
         if hasattr(app, "_loading_wfos") and app._loading_wfos:
@@ -228,6 +235,8 @@ class WxDXX(App):
         self._loading_wfos: set[str] = set()
         # Timer handle for restart capability
         self._refresh_timer = None
+        # Last successful refresh time for status bar display
+        self._last_refresh_time: datetime | None = None
 
     def _set_product_timing(
         self,
@@ -292,6 +301,9 @@ class WxDXX(App):
             elapsed = time.monotonic() - start_time
             if elapsed < min_display_time:
                 await asyncio.sleep(min_display_time - elapsed)
+
+            # Record successful refresh time
+            self._last_refresh_time = datetime.now(timezone.utc)
         finally:
             self._is_refreshing = False
             self._update_clock_display()
