@@ -669,14 +669,14 @@ class Sidebar(Vertical):
     def update_wfo_products(
         self,
         wfo_id: str,
-        products: list[tuple[str, str, str]],  # (product_id, product_type, time_str)
+        products: list[tuple[str, str, str, datetime | None]],  # (id, type, time, expires)
         alerts: list | None = None,  # list[WFOAlert]
     ) -> None:
         """Update the products and alerts list for a specific WFO.
 
         Args:
             wfo_id: The WFO identifier
-            products: List of (product_id, product_type, time_str) tuples
+            products: List of (product_id, product_type, time_str, expires) tuples
             alerts: Optional list of WFOAlert objects
         """
         listview = self.query_one("#sidebar-list", ListView)
@@ -722,14 +722,14 @@ class Sidebar(Vertical):
                 })
 
         # Add products
-        for product_id, product_type, time_str in products:
+        for product_id, product_type, time_str, expires in products:
             label = f"{product_type} {time_str}" if time_str else product_type
             severity_class = self._get_wfo_severity_class(product_type)
             all_items.append({
                 "label": label,
                 "item_id": f"wfo-{wfo_id}-{product_id}",
                 "severity_class": severity_class,
-                "expires": None,
+                "expires": expires,
             })
 
         if not all_items:

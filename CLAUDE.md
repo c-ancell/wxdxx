@@ -101,38 +101,28 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - Sidebar shows time-until-expiry for MDs and Watches (e.g., "MD 2457 (2h 15m)", "TOR 127 (4h 30m)")
 - Status bar shows "Refreshed: Xm ago" timestamp that updates dynamically
 - WFO Active Alerts: Hazard alerts (warnings, watches, advisories) fetched by forecast zone and displayed alongside text products with NWS color coding and expiry countdowns
+- SPS Expiry Filtering: Special Weather Statements parsed for UGC header expiry times; expired SPS products automatically filtered from sidebar with countdown display
 
 ## TODO / Not Yet Implemented
-
-### Epic: SPS Expiry Filtering
-**Background:** SPS (Special Weather Statement) products describe active weather events with specific expiry times (e.g., "thunderstorms until 10 AM"). However, the NWS API's `expirationTime` field is not populated for text products. The expiry is embedded in the UGC (Universal Geographic Code) header within the product text.
-
-**The problem:** We display the most recent SPS from each WFO regardless of age. If no new SPS is issued, an 18+ hour old expired SPS remains visible because:
-- API always returns most recent product
-- Cache refresh just re-fetches the same old product
-- No expiry filtering exists
-
-**Technical approach:** Parse the UGC header expiry (`DDHHMM-` format) from SPS product text and filter out expired products from the sidebar.
-
-**UGC format example:**
-```
-CAZ103-104-106-261800-
-               ^^^^^^
-               Day 26, 18:00 UTC
-```
-
-- [ ] Add `parse_ugc_expiry(text)` helper function to extract expiry datetime from UGC header
-- [ ] Modify `get_products_by_type()` to fetch full product text for SPS (currently lazy-loaded)
-- [ ] Add `expires` field to WFOProduct model (populate from UGC for SPS, None for others)
-- [ ] Filter expired SPS products in `_refresh_wfo_products()` before updating sidebar
-- [ ] Pass `expires` to sidebar for SPS items to show countdown (reuse existing expiry display logic)
-- [ ] Add unit tests for UGC expiry parsing with various formats
 
 ### Larger effort
 - Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 - Status bar cleanup: information (refresh time, product timing, clocks) is starting to overlap with quick-key commands. Consider leaving only "?" in the footer and moving all other hotkey shortcuts into the help menu (verify they're all documented there first)
 - Add "R" (SHIFT+r) for hard refresh: Currently 'r' clears all caches and refreshes. Consider making 'r' a soft refresh (use cached data if valid) and 'R' a hard refresh (clear all caches first). This would make auto-refresh and 'r' behave the same way.
+
+### Epic: News Ticker for Watches/Warnings
+**Concept:** A scrolling news-ticker bar at the top of the UI showing new watches and warnings issued nationwide. Headlines scroll infinitely.
+
+**Display format:**
+- New issuances: `***NEW: OUN issues Tornado Warning for Oklahoma County until 10pm CDT***`
+- Existing products: `EWX: Flash Flood Warning in effect until 28/1200 CDT`
+
+**Styling:**
+- NEW prefix headlines: Background colored using NWS conventions (red for TOR, yellow for SVR, etc.) for first 2 appearances
+- After 2 appearances: Text colored by convention on black background (e.g., red text on black for TOR)
+
+**To flesh out:** Data source, refresh strategy, headline priority/ordering, scroll speed, max headlines
 
 ### Architecture
 - Screens are stubs - all rendering happens in main app
