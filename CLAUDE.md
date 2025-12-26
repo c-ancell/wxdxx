@@ -82,8 +82,10 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - Convective Outlooks (Day 1-3) fetched from SPC
 - Mesoscale Discussions - listed in sidebar, click to view full text
 - Watches - listed in sidebar, click to view full text
-- UTC and local clocks in status bar for comparing product timestamps
-- Time since issuance and time until expiry shown in status bar when viewing products (MDs, Watches, Outlooks, and WFO products all have timestamps extracted)
+- UTC and local clocks in status bar with day number (e.g., "UTC: 25 14:32 | Local: 25 08:32")
+- Time since issuance shown in status bar (minute resolution)
+- Outlook validity shown as date range (e.g., "Valid: 251200Z - 261200Z")
+- MDs and Watches show countdown to expiry (e.g., "Expires: in 2h 15m")
 - Expired products (MDs, Watches) are automatically filtered from the sidebar
 - Keyboard: q=quit, r=refresh, s=settings, 1/2/3=Day 1/2/3 outlooks, ?=help, Tab=switch panel
 - Scrolling in content view: j/k=line up/down, d/u=page down/up, g/G=top/bottom, arrows also work
@@ -94,14 +96,11 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - Tracked WFOs persist across app restarts (stored in ~/.config/wxdxx/config.toml)
 - TTL-based in-memory caching for all data (outlooks 5min, lists 2min, details 10-30min)
 - Auto-refresh uses cached data if not expired; manual refresh (r) clears all caches
-- Outlook status bar shows "Valid Until" (not "Expires") and "Next: in Xh Ym" for when the next outlook is scheduled
+- Outlook status bar shows "Next: in Xh Ym" for when the next outlook is scheduled
 - Sidebar items color-coded using NWS conventions: red for tornado watches, yellow for SVR, magenta for PDS; outlook risk levels (TSTM→HIGH); MD watch probability; WFO warnings (TOR/SVR/FFW/WSW)
+- Sidebar shows time-until-expiry for MDs and Watches (e.g., "MD 2457 (2h 15m)", "TOR 127 (4h 30m)")
 
-## TODO / Not Yet Implemented (prioritized: quick wins first)
-
-### Quick wins
-- Time display refinements: issued time only needs minute resolution (not seconds), "Valid Until" should maybe show "Valid: DDHHmm - DDHHmm" format, and clock widget should show today's day number (e.g., "25") in both UTC and local time
-- Show minutes-until-expiry on sidebar items that have a set expiration time
+## TODO / Not Yet Implemented
 
 ### Larger effort
 - Make sidebar sections collapsible
@@ -109,6 +108,7 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 
 ### Spikes / Research
 - Investigate why flood warnings/watches/statements and less-frequently issued WFO products don't appear when retrieving local text products (may be an issue with `DEFAULT_PRODUCT_TYPES` filtering, API query parameters, or how NWS categorizes products by issuing office)
+- SPS products seem to stick around in the sidebar well after they are relevant (may need expiration handling or shorter cache TTL for certain product types)
 
 ### Architecture
 - Screens are stubs - all rendering happens in main app

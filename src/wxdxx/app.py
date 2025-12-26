@@ -26,16 +26,14 @@ from .widgets.wfo_input import WFODialogMode, WFOInputDialog
 
 
 def format_timedelta(td_seconds: float) -> str:
-    """Format seconds into a human-readable duration string."""
+    """Format seconds into a human-readable duration string (minutes resolution)."""
     abs_seconds = abs(int(td_seconds))
     hours, remainder = divmod(abs_seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
+    minutes, _ = divmod(remainder, 60)
     if hours > 0:
         return f"{hours}h {minutes}m"
-    elif minutes > 0:
-        return f"{minutes}m {seconds}s"
     else:
-        return f"{seconds}s"
+        return f"{minutes}m"
 
 
 class ClockWidget(Static):
@@ -55,7 +53,7 @@ class ClockWidget(Static):
         utc_now = datetime.now(timezone.utc)
         local_now = datetime.now()
 
-        clock_str = f"UTC: {utc_now.strftime('%H:%M:%S')} | Local: {local_now.strftime('%H:%M:%S')}"
+        clock_str = f"UTC: {utc_now.strftime('%d %H:%M')} | Local: {local_now.strftime('%d %H:%M')}"
 
         # Check for product timing info from app
         app = self.app
@@ -82,13 +80,25 @@ class ClockWidget(Static):
             if expires.tzinfo is None:
                 expires = expires.replace(tzinfo=timezone.utc)
             until = (expires - utc_now).total_seconds()
-            # Use "Valid Until" for outlooks, "Expires" for MDs/Watches
             is_outlook = getattr(app, "_current_product_is_outlook", False)
-            if until > 0:
-                label = "Valid Until" if is_outlook else "Expires"
-                parts.append(f"{label}: in {format_timedelta(until)}")
+
+            if is_outlook:
+                # Show date range for outlooks: Valid: DDHHmmZ - DDHHmmZ
+                valid_start = getattr(app, "_current_product_valid_start", None)
+                if valid_start:
+                    if valid_start.tzinfo is None:
+                        valid_start = valid_start.replace(tzinfo=timezone.utc)
+                    parts.append(
+                        f"Valid: {valid_start.strftime('%d%H%MZ')} - {expires.strftime('%d%H%MZ')}"
+                    )
+                else:
+                    parts.append(f"Valid Until: {expires.strftime('%d%H%MZ')}")
             else:
-                parts.append(f"Expired: {format_timedelta(-until)} ago")
+                # Show countdown for MDs/Watches
+                if until > 0:
+                    parts.append(f"Expires: in {format_timedelta(until)}")
+                else:
+                    parts.append(f"Expired: {format_timedelta(-until)} ago")
 
         if hasattr(app, "_current_product_next_scheduled") and app._current_product_next_scheduled:
             next_sched = app._current_product_next_scheduled
@@ -209,6 +219,7 @@ class WxDXX(App):
         # Current product timing for status bar display
         self._current_product_issued: datetime | None = None
         self._current_product_expires: datetime | None = None
+        self._current_product_valid_start: datetime | None = None
         self._current_product_next_scheduled: datetime | None = None
         self._current_product_is_outlook: bool = False
         # Auto-refresh state
@@ -222,12 +233,14 @@ class WxDXX(App):
         self,
         issued: datetime | None = None,
         expires: datetime | None = None,
+        valid_start: datetime | None = None,
         next_scheduled: datetime | None = None,
         is_outlook: bool = False,
     ) -> None:
         """Set the current product timing for status bar display."""
         self._current_product_issued = issued
         self._current_product_expires = expires
+        self._current_product_valid_start = valid_start
         self._current_product_next_scheduled = next_scheduled
         self._current_product_is_outlook = is_outlook
 
@@ -311,7 +324,10 @@ class WxDXX(App):
                 md for md in mds
                 if md.expires is None or md.expires > now
             ]
-            md_data = [(md.number, md.concerning, md.watch_probability) for md in active_mds]
+            md_data = [
+                (md.number, md.concerning, md.watch_probability, md.expires)
+                for md in active_mds
+            ]
             sidebar.update_mds(md_data)
         except Exception as e:
             sidebar.update_mds([])
@@ -332,7 +348,10 @@ class WxDXX(App):
                 w for w in watches
                 if w.expires is None or w.expires > now
             ]
-            watch_data = [(w.number, w.watch_type.value, w.is_pds) for w in active_watches]
+            watch_data = [
+                (w.number, w.watch_type.value, w.is_pds, w.expires)
+                for w in active_watches
+            ]
             sidebar.update_watches(watch_data)
         except Exception as e:
             sidebar.update_watches([])
@@ -432,6 +451,7 @@ class WxDXX(App):
             self._set_product_timing(
                 issued=cached.issued,
                 expires=cached.valid_end,
+                valid_start=cached.valid_start,
                 next_scheduled=cached.next_scheduled,
                 is_outlook=True,
             )
@@ -449,6 +469,7 @@ class WxDXX(App):
             self._set_product_timing(
                 issued=outlook.issued,
                 expires=outlook.valid_end,
+                valid_start=outlook.valid_start,
                 next_scheduled=outlook.next_scheduled,
                 is_outlook=True,
             )

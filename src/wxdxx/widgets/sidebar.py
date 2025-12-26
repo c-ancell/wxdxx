@@ -1,9 +1,20 @@
 """Sidebar navigation widget."""
 
+from datetime import datetime, timezone
+
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.message import Message
 from textual.widgets import Label, ListItem, ListView, Static
+
+
+def format_time_remaining(seconds: float) -> str:
+    """Format remaining time as 'Xh Ym' or 'Xm'."""
+    hours, remainder = divmod(int(seconds), 3600)
+    minutes, _ = divmod(remainder, 60)
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
 
 
 class SidebarItem(ListItem):
@@ -16,11 +27,14 @@ class SidebarItem(ListItem):
         indent: int = 0,
         id: str | None = None,
         severity_class: str | None = None,
+        expires: datetime | None = None,
     ) -> None:
         super().__init__(id=id)
+        self.base_label = label  # Label without expiry time
         self.label_text = label
         self.item_id = item_id
         self.indent = indent
+        self.expires = expires
         if severity_class:
             self.add_class(severity_class)
 
@@ -33,6 +47,19 @@ class SidebarItem(ListItem):
         self.label_text = new_label
         prefix = "  " * self.indent
         self.query_one(Label).update(f"{prefix}{new_label}")
+
+    def refresh_expiry_label(self) -> None:
+        """Recalculate and update the label based on current expiry time."""
+        if not self.expires:
+            return
+        now = datetime.now(timezone.utc)
+        remaining = (self.expires - now).total_seconds()
+        if remaining > 0:
+            new_label = f"{self.base_label} ({format_time_remaining(remaining)})"
+        else:
+            new_label = f"{self.base_label} (expired)"
+        if new_label != self.label_text:
+            self.update_label(new_label)
 
 
 class SidebarCategory(Static):
@@ -236,6 +263,15 @@ class Sidebar(Vertical):
             id="sidebar-list",
         )
 
+    def on_mount(self) -> None:
+        """Start timer to refresh expiry labels."""
+        self.set_interval(30, self._refresh_expiry_labels)
+
+    def _refresh_expiry_labels(self) -> None:
+        """Refresh all sidebar items that have expiry times."""
+        for item in self.query(SidebarItem):
+            item.refresh_expiry_label()
+
     def _get_md_severity_class(self, watch_prob: int | None) -> str | None:
         """Get CSS class based on MD watch probability."""
         if watch_prob is None:
@@ -248,11 +284,13 @@ class Sidebar(Vertical):
             return "md-prob-med"
         return None  # Low probability, no highlighting
 
-    def update_mds(self, mds: list[tuple[int, str | None, int | None]]) -> None:
+    def update_mds(
+        self, mds: list[tuple[int, str | None, int | None, datetime | None]]
+    ) -> None:
         """Update the MDs section with active discussions.
 
         Args:
-            mds: List of (md_number, concerning_text, watch_probability) tuples
+            mds: List of (md_number, concerning_text, watch_probability, expires) tuples
         """
         listview = self.query_one("#sidebar-list", ListView)
 
@@ -277,20 +315,28 @@ class Sidebar(Vertical):
             listview.mount(item, after=cat_mds)
         else:
             # Add each MD as a sidebar item (in reverse so they appear in order)
-            for md_num, concerning, watch_prob in reversed(mds):
-                label = f"MD {md_num}"
+            for md_num, concerning, watch_prob, expires in reversed(mds):
+                base_label = f"MD {md_num}"
                 severity_class = self._get_md_severity_class(watch_prob)
                 item = SidebarItem(
-                    label, f"md-{md_num}", indent=1, severity_class=severity_class
+                    base_label,
+                    f"md-{md_num}",
+                    indent=1,
+                    severity_class=severity_class,
+                    expires=expires,
                 )
                 item.add_class("md-item")
+                # Calculate initial label with expiry
+                item.refresh_expiry_label()
                 listview.mount(item, after=cat_mds)
 
-    def update_watches(self, watches: list[tuple[int, str, bool]]) -> None:
+    def update_watches(
+        self, watches: list[tuple[int, str, bool, datetime | None]]
+    ) -> None:
         """Update the Watches section with active watches.
 
         Args:
-            watches: List of (watch_number, watch_type, is_pds) tuples
+            watches: List of (watch_number, watch_type, is_pds, expires) tuples
                     watch_type is "tornado" or "severe_thunderstorm"
         """
         listview = self.query_one("#sidebar-list", ListView)
@@ -316,10 +362,10 @@ class Sidebar(Vertical):
             listview.mount(item, after=cat_watches)
         else:
             # Add each watch as a sidebar item (in reverse so they appear in order)
-            for watch_num, watch_type, is_pds in reversed(watches):
+            for watch_num, watch_type, is_pds, expires in reversed(watches):
                 prefix = "TOR" if watch_type == "tornado" else "SVR"
                 pds = " PDS" if is_pds else ""
-                label = f"{prefix} {watch_num}{pds}"
+                base_label = f"{prefix} {watch_num}{pds}"
 
                 # Determine severity class (PDS takes priority)
                 if is_pds:
@@ -330,9 +376,15 @@ class Sidebar(Vertical):
                     severity_class = "watch-svr"
 
                 item = SidebarItem(
-                    label, f"watch-{watch_num}", indent=1, severity_class=severity_class
+                    base_label,
+                    f"watch-{watch_num}",
+                    indent=1,
+                    severity_class=severity_class,
+                    expires=expires,
                 )
                 item.add_class("watch-item")
+                # Calculate initial label with expiry
+                item.refresh_expiry_label()
                 listview.mount(item, after=cat_watches)
 
     def add_wfo(self, wfo_id: str) -> None:
