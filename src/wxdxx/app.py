@@ -258,6 +258,10 @@ class WxDXX(App):
 
     async def _refresh_all_data_with_indicator(self) -> None:
         """Refresh all data with status bar indicator."""
+        # Prevent concurrent refreshes
+        if self._is_refreshing:
+            return
+
         min_display_time = 2.0  # Show "Refreshing..." for at least 2 seconds
         start_time = time.monotonic()
 
@@ -307,7 +311,7 @@ class WxDXX(App):
                 md for md in mds
                 if md.expires is None or md.expires > now
             ]
-            md_data = [(md.number, md.concerning) for md in active_mds]
+            md_data = [(md.number, md.concerning, md.watch_probability) for md in active_mds]
             sidebar.update_mds(md_data)
         except Exception as e:
             sidebar.update_mds([])
@@ -333,6 +337,22 @@ class WxDXX(App):
         except Exception as e:
             sidebar.update_watches([])
             self.notify(f"Failed to fetch watches: {e}", severity="error")
+
+        # Fetch outlook risk levels for sidebar coloring (use cache if available)
+        for day in [OutlookDay.DAY1, OutlookDay.DAY2, OutlookDay.DAY3]:
+            try:
+                cache_key = day.value
+                outlook = self._outlook_cache.get(cache_key)
+                if outlook is None:
+                    outlook = await self.spc_client.get_outlook(day)
+                    self._outlook_cache.set(cache_key, outlook)
+
+                day_num = int(day.value.replace("day", ""))
+                sidebar.update_outlook_risk(
+                    day_num, outlook.max_risk.value if outlook.max_risk else None
+                )
+            except Exception:
+                pass  # Silently fail - risk will show when user clicks
 
     async def on_unmount(self) -> None:
         """Clean up when app closes."""
@@ -401,7 +421,9 @@ class WxDXX(App):
     async def _load_outlook(self, day: OutlookDay) -> None:
         """Load and display a convective outlook."""
         product_view = self.query_one(ProductView)
-        cache_key = day.value  # "Day 1", "Day 2", "Day 3"
+        sidebar = self.query_one(Sidebar)
+        cache_key = day.value  # "day1", "day2", "day3"
+        day_num = int(day.value.replace("day", ""))
 
         # Check cache first
         cached = self._outlook_cache.get(cache_key)
@@ -414,6 +436,8 @@ class WxDXX(App):
                 is_outlook=True,
             )
             product_view.show_product(cached.title, cached.text, risk_str)
+            # Update sidebar with risk level highlighting
+            sidebar.update_outlook_risk(day_num, cached.max_risk.value if cached.max_risk else None)
             return
 
         # Fetch from API
@@ -429,6 +453,8 @@ class WxDXX(App):
                 is_outlook=True,
             )
             product_view.show_product(outlook.title, outlook.text, risk_str)
+            # Update sidebar with risk level highlighting
+            sidebar.update_outlook_risk(day_num, outlook.max_risk.value if outlook.max_risk else None)
         except Exception as e:
             self._set_product_timing()
             product_view.show_error(str(e))

@@ -9,11 +9,20 @@ from textual.widgets import Label, ListItem, ListView, Static
 class SidebarItem(ListItem):
     """A clickable item in the sidebar."""
 
-    def __init__(self, label: str, item_id: str, indent: int = 0, id: str | None = None) -> None:
+    def __init__(
+        self,
+        label: str,
+        item_id: str,
+        indent: int = 0,
+        id: str | None = None,
+        severity_class: str | None = None,
+    ) -> None:
         super().__init__(id=id)
         self.label_text = label
         self.item_id = item_id
         self.indent = indent
+        if severity_class:
+            self.add_class(severity_class)
 
     def compose(self) -> ComposeResult:
         prefix = "  " * self.indent
@@ -72,6 +81,133 @@ class Sidebar(Vertical):
         padding: 1 0 0 0;
         text-style: bold;
     }
+
+    /* Watch severity colors (NWS standard) */
+    Sidebar ListItem.watch-tor {
+        background: #ff0000;
+        color: #ffffff;
+    }
+    Sidebar ListItem.watch-tor:hover {
+        background: #cc0000;
+    }
+    Sidebar ListItem.watch-svr {
+        background: #ffff00;
+        color: #000000;
+    }
+    Sidebar ListItem.watch-svr:hover {
+        background: #cccc00;
+    }
+    Sidebar ListItem.watch-pds {
+        background: #ff00ff;
+        color: #ffffff;
+    }
+    Sidebar ListItem.watch-pds:hover {
+        background: #cc00cc;
+    }
+
+    /* Outlook risk level colors (NWS/SPC standard) */
+    Sidebar ListItem.risk-tstm {
+        background: #90ee90;
+        color: #000000;
+    }
+    Sidebar ListItem.risk-tstm:hover {
+        background: #70ce70;
+    }
+    Sidebar ListItem.risk-mrgl {
+        background: #008000;
+        color: #ffffff;
+    }
+    Sidebar ListItem.risk-mrgl:hover {
+        background: #006600;
+    }
+    Sidebar ListItem.risk-slgt {
+        background: #ffff00;
+        color: #000000;
+    }
+    Sidebar ListItem.risk-slgt:hover {
+        background: #cccc00;
+    }
+    Sidebar ListItem.risk-enh {
+        background: #ffa500;
+        color: #000000;
+    }
+    Sidebar ListItem.risk-enh:hover {
+        background: #cc8400;
+    }
+    Sidebar ListItem.risk-mdt {
+        background: #ff0000;
+        color: #ffffff;
+    }
+    Sidebar ListItem.risk-mdt:hover {
+        background: #cc0000;
+    }
+    Sidebar ListItem.risk-high {
+        background: #ff00ff;
+        color: #ffffff;
+    }
+    Sidebar ListItem.risk-high:hover {
+        background: #cc00cc;
+    }
+
+    /* MD watch probability colors */
+    Sidebar ListItem.md-prob-med {
+        background: #fffacd;
+        color: #000000;
+    }
+    Sidebar ListItem.md-prob-med:hover {
+        background: #e6e1b8;
+    }
+    Sidebar ListItem.md-prob-high {
+        background: #ffd700;
+        color: #000000;
+    }
+    Sidebar ListItem.md-prob-high:hover {
+        background: #ccac00;
+    }
+    Sidebar ListItem.md-prob-likely {
+        background: #ff6347;
+        color: #ffffff;
+    }
+    Sidebar ListItem.md-prob-likely:hover {
+        background: #cc4f39;
+    }
+
+    /* WFO product type colors */
+    Sidebar ListItem.wfo-warn-tor {
+        background: #ff0000;
+        color: #ffffff;
+    }
+    Sidebar ListItem.wfo-warn-tor:hover {
+        background: #cc0000;
+    }
+    Sidebar ListItem.wfo-warn-svr {
+        background: #ffa500;
+        color: #000000;
+    }
+    Sidebar ListItem.wfo-warn-svr:hover {
+        background: #cc8400;
+    }
+    Sidebar ListItem.wfo-warn-ffw {
+        background: #228b22;
+        color: #ffffff;
+    }
+    Sidebar ListItem.wfo-warn-ffw:hover {
+        background: #1b6f1b;
+    }
+    Sidebar ListItem.wfo-warn-wsw {
+        background: #ffb6c1;
+        color: #000000;
+    }
+    Sidebar ListItem.wfo-warn-wsw:hover {
+        background: #cc919a;
+    }
+    Sidebar ListItem.wfo-stmt {
+        background: #f0e68c;
+        color: #000000;
+    }
+    Sidebar ListItem.wfo-stmt:hover {
+        background: #c0b870;
+    }
     """
 
     class ItemSelected(Message):
@@ -100,11 +236,23 @@ class Sidebar(Vertical):
             id="sidebar-list",
         )
 
-    def update_mds(self, mds: list[tuple[int, str | None]]) -> None:
+    def _get_md_severity_class(self, watch_prob: int | None) -> str | None:
+        """Get CSS class based on MD watch probability."""
+        if watch_prob is None:
+            return None
+        if watch_prob >= 80:
+            return "md-prob-likely"
+        if watch_prob >= 60:
+            return "md-prob-high"
+        if watch_prob >= 20:
+            return "md-prob-med"
+        return None  # Low probability, no highlighting
+
+    def update_mds(self, mds: list[tuple[int, str | None, int | None]]) -> None:
         """Update the MDs section with active discussions.
 
         Args:
-            mds: List of (md_number, concerning_text) tuples
+            mds: List of (md_number, concerning_text, watch_probability) tuples
         """
         listview = self.query_one("#sidebar-list", ListView)
 
@@ -121,7 +269,6 @@ class Sidebar(Vertical):
 
         # Find the MDs category header to insert after
         cat_mds = self.query_one("#cat-mds")
-        cat_index = listview._nodes.index(cat_mds)
 
         if not mds:
             # No current MDs - don't set an ID, use class for cleanup
@@ -130,13 +277,12 @@ class Sidebar(Vertical):
             listview.mount(item, after=cat_mds)
         else:
             # Add each MD as a sidebar item (in reverse so they appear in order)
-            for md_num, concerning in reversed(mds):
+            for md_num, concerning, watch_prob in reversed(mds):
                 label = f"MD {md_num}"
-                if concerning:
-                    # Truncate long concerning text
-                    short = concerning[:15] + "..." if len(concerning) > 18 else concerning
-                    label = f"MD {md_num}"
-                item = SidebarItem(label, f"md-{md_num}", indent=1)
+                severity_class = self._get_md_severity_class(watch_prob)
+                item = SidebarItem(
+                    label, f"md-{md_num}", indent=1, severity_class=severity_class
+                )
                 item.add_class("md-item")
                 listview.mount(item, after=cat_mds)
 
@@ -174,7 +320,18 @@ class Sidebar(Vertical):
                 prefix = "TOR" if watch_type == "tornado" else "SVR"
                 pds = " PDS" if is_pds else ""
                 label = f"{prefix} {watch_num}{pds}"
-                item = SidebarItem(label, f"watch-{watch_num}", indent=1)
+
+                # Determine severity class (PDS takes priority)
+                if is_pds:
+                    severity_class = "watch-pds"
+                elif watch_type == "tornado":
+                    severity_class = "watch-tor"
+                else:
+                    severity_class = "watch-svr"
+
+                item = SidebarItem(
+                    label, f"watch-{watch_num}", indent=1, severity_class=severity_class
+                )
                 item.add_class("watch-item")
                 listview.mount(item, after=cat_watches)
 
@@ -233,6 +390,23 @@ class Sidebar(Vertical):
             placeholder = SidebarItem("Press 'w' to add", "wfo-hint", indent=1, id="wfo-placeholder")
             listview.mount(placeholder, after=cat_wfo)
 
+    def _get_wfo_severity_class(self, product_type: str) -> str | None:
+        """Get CSS class for WFO product type."""
+        product_type = product_type.upper()
+
+        if product_type == "TOR":
+            return "wfo-warn-tor"
+        elif product_type == "SVR":
+            return "wfo-warn-svr"
+        elif product_type == "FFW":
+            return "wfo-warn-ffw"
+        elif product_type == "WSW":
+            return "wfo-warn-wsw"
+        elif product_type == "SPS":
+            return "wfo-stmt"
+        else:
+            return None  # AFD, HWO, ZFP, NOW - no special coloring
+
     def update_wfo_products(
         self,
         wfo_id: str,
@@ -264,9 +438,34 @@ class Sidebar(Vertical):
             # Add products in reverse order (so they appear in order)
             for product_id, product_type, time_str in reversed(products):
                 label = f"{product_type} {time_str}" if time_str else product_type
-                item = SidebarItem(label, f"wfo-{wfo_id}-{product_id}", indent=2)
+                severity_class = self._get_wfo_severity_class(product_type)
+                item = SidebarItem(
+                    label, f"wfo-{wfo_id}-{product_id}", indent=2, severity_class=severity_class
+                )
                 item.add_class(f"wfo-{wfo_id}-item")
                 listview.mount(item, after=wfo_header)
+
+    def update_outlook_risk(self, day: int, risk_level: str | None) -> None:
+        """Update the risk level styling for an outlook item.
+
+        Args:
+            day: Outlook day (1, 2, or 3)
+            risk_level: Risk level string (TSTM, MRGL, SLGT, ENH, MDT, HIGH) or None
+        """
+        item_id = f"outlook-day{day}"
+
+        # Find the outlook item
+        for item in self.query(SidebarItem):
+            if item.item_id == item_id:
+                # Remove any existing risk classes
+                for cls in ["risk-tstm", "risk-mrgl", "risk-slgt", "risk-enh", "risk-mdt", "risk-high"]:
+                    item.remove_class(cls)
+
+                # Add new risk class
+                if risk_level:
+                    risk_class = f"risk-{risk_level.lower()}"
+                    item.add_class(risk_class)
+                break
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle selection in the ListView."""

@@ -74,6 +74,10 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - `DOMQuery` objects are truthy even when empty; use `len(list(query(...))) == 0` to check for no results
 - Status bar indicators (like "Refreshing...") need forced updates via `_update_clock_display()` when state changes - the 1-second polling interval is too slow to catch fast operations
 
+**SPC/NWS parsing gotchas:**
+- Always deduplicate when parsing HTML link lists with `re.findall()` - pages often have multiple links to the same product (header, table, sidebar, etc.). Use `set()` before returning.
+- The `_is_refreshing` flag now guards against concurrent refreshes - check it at the start of `_refresh_all_data_with_indicator()`
+
 ## Current Features
 - Convective Outlooks (Day 1-3) fetched from SPC
 - Mesoscale Discussions - listed in sidebar, click to view full text
@@ -91,14 +95,16 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - TTL-based in-memory caching for all data (outlooks 5min, lists 2min, details 10-30min)
 - Auto-refresh uses cached data if not expired; manual refresh (r) clears all caches
 - Outlook status bar shows "Valid Until" (not "Expires") and "Next: in Xh Ym" for when the next outlook is scheduled
+- Sidebar items color-coded using NWS conventions: red for tornado watches, yellow for SVR, magenta for PDS; outlook risk levels (TSTM→HIGH); MD watch probability; WFO warnings (TOR/SVR/FFW/WSW)
 
 ## TODO / Not Yet Implemented (prioritized: quick wins first)
 
 ### Quick wins
 - Time display refinements: issued time only needs minute resolution (not seconds), "Valid Until" should maybe show "Valid: DDHHmm - DDHHmm" format, and clock widget should show today's day number (e.g., "25") in both UTC and local time
+- Show minutes-until-expiry on sidebar items that have a set expiration time
 
 ### Larger effort
-- Highlight sidebar items for new products using NWS color conventions (e.g., red/white for tornado warnings, purple/white for PDS, etc.)
+- Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 
 ### Spikes / Research

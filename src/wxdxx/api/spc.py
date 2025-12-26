@@ -105,6 +105,7 @@ class SPCClient:
 
         text = self._extract_md_text(response.text)
         concerning = self._parse_md_concerning(text)
+        watch_probability = self._parse_watch_probability(text)
 
         # Extract timestamps
         issued = self._parse_local_timestamp(text)
@@ -116,6 +117,7 @@ class SPCClient:
             concerning=concerning,
             issued=issued,
             expires=expires,
+            watch_probability=watch_probability,
         )
 
     async def get_active_watches(self) -> list[Watch]:
@@ -212,13 +214,34 @@ class SPCClient:
     def _parse_md_list(self, html: str) -> list[int]:
         """Parse MD numbers from the MD listing page."""
         matches = re.findall(r"md(\d{4})\.html", html, re.IGNORECASE)
-        return sorted([int(m) for m in matches], reverse=True)
+        return sorted(set(int(m) for m in matches), reverse=True)
 
     def _parse_md_concerning(self, text: str) -> str | None:
         """Extract the 'concerning' line from MD text."""
         match = re.search(r"CONCERNING\.\.\.(.+?)(?:\n|$)", text, re.IGNORECASE)
         if match:
             return match.group(1).strip()
+        return None
+
+    def _parse_watch_probability(self, text: str) -> int | None:
+        """Parse watch probability percentage from MD text.
+
+        Handles patterns like:
+        - "PROBABILITY OF WATCH ISSUANCE...40 PERCENT"
+        - "WATCH PROBABILITY...80%"
+        - "...PROBABILITY OF WATCH ISSUANCE IS 20 PERCENT..."
+
+        Returns:
+            Probability as integer (0-100), or None if not found
+        """
+        patterns = [
+            r"PROBABILITY\s+OF\s+WATCH\s+ISSUANCE[.\s]*?(\d+)\s*(?:PERCENT|%)",
+            r"WATCH\s+PROBABILITY[.\s]*?(\d+)\s*(?:PERCENT|%)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return int(match.group(1))
         return None
 
     def _parse_watch_list(self, html: str) -> list[tuple[int, WatchType]]:
