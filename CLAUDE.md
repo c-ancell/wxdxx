@@ -103,14 +103,47 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 
 ## TODO / Not Yet Implemented
 
+### Epic: WFO Active Alerts
+**Background:** The NWS API separates text products (`/products`) from hazard alerts (`/alerts/active`). We currently only query text products (AFD, HWO, SPS, NOW, ZFP). Warnings, watches, and advisories (Flood Watch, Winter Storm Warning, etc.) are in the alerts system and require querying by forecast zone.
+
+**Technical approach:** Each WFO has `responsibleForecastZones` (via `/offices/{wfoId}`). Query `/alerts/active?zone=...` with those zones to get active hazard alerts for that WFO's coverage area.
+
+- [ ] Add `get_wfo_zones(wfo_id)` method to NWSClient to fetch responsible forecast zones
+- [ ] Refactor `get_active_alerts()` to accept zone list and filter by zones instead of senderName
+- [ ] Cache WFO zones (they rarely change) - consider long TTL or persist to config
+- [ ] Call `get_active_alerts()` during `_refresh_wfo_products()`
+- [ ] Update sidebar to display alerts alongside text products
+- [ ] Add color coding for alerts based on severity/event type (red for warnings, orange for watches, yellow for advisories)
+- [ ] Show expiry countdown for alerts (they have `expires` field)
+
+### Epic: SPS Expiry Filtering
+**Background:** SPS (Special Weather Statement) products describe active weather events with specific expiry times (e.g., "thunderstorms until 10 AM"). However, the NWS API's `expirationTime` field is not populated for text products. The expiry is embedded in the UGC (Universal Geographic Code) header within the product text.
+
+**The problem:** We display the most recent SPS from each WFO regardless of age. If no new SPS is issued, an 18+ hour old expired SPS remains visible because:
+- API always returns most recent product
+- Cache refresh just re-fetches the same old product
+- No expiry filtering exists
+
+**Technical approach:** Parse the UGC header expiry (`DDHHMM-` format) from SPS product text and filter out expired products from the sidebar.
+
+**UGC format example:**
+```
+CAZ103-104-106-261800-
+               ^^^^^^
+               Day 26, 18:00 UTC
+```
+
+- [ ] Add `parse_ugc_expiry(text)` helper function to extract expiry datetime from UGC header
+- [ ] Modify `get_products_by_type()` to fetch full product text for SPS (currently lazy-loaded)
+- [ ] Add `expires` field to WFOProduct model (populate from UGC for SPS, None for others)
+- [ ] Filter expired SPS products in `_refresh_wfo_products()` before updating sidebar
+- [ ] Pass `expires` to sidebar for SPS items to show countdown (reuse existing expiry display logic)
+- [ ] Add unit tests for UGC expiry parsing with various formats
+
 ### Larger effort
 - Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 - Status bar cleanup: information (refresh time, product timing, clocks) is starting to overlap with quick-key commands. Consider leaving only "?" in the footer and moving all other hotkey shortcuts into the help menu (verify they're all documented there first)
-
-### Spikes / Research
-- Investigate why flood warnings/watches/statements, locally-issued advisories, and other less-frequently issued WFO products don't appear when retrieving local text products (may be an issue with `DEFAULT_PRODUCT_TYPES` filtering, API query parameters, or how NWS categorizes products by issuing office)
-- SPS products seem to stick around in the sidebar well after they are relevant (18+ hours old observed) - investigate whether these products have expiry times that can be parsed, or if we need shorter cache TTL / age-based filtering
 
 ### Architecture
 - Screens are stubs - all rendering happens in main app
