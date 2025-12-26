@@ -31,12 +31,23 @@ class SidebarItem(ListItem):
     ) -> None:
         super().__init__(id=id)
         self.base_label = label  # Label without expiry time
-        self.label_text = label
         self.item_id = item_id
         self.indent = indent
         self.expires = expires
+        # Calculate initial label with expiry (before compose runs)
+        self.label_text = self._compute_expiry_label()
         if severity_class:
             self.add_class(severity_class)
+
+    def _compute_expiry_label(self) -> str:
+        """Compute the label text including expiry time if applicable."""
+        if not self.expires:
+            return self.base_label
+        now = datetime.now(timezone.utc)
+        remaining = (self.expires - now).total_seconds()
+        if remaining > 0:
+            return f"{self.base_label} ({format_time_remaining(remaining)})"
+        return f"{self.base_label} (expired)"
 
     def compose(self) -> ComposeResult:
         prefix = "  " * self.indent
@@ -52,12 +63,7 @@ class SidebarItem(ListItem):
         """Recalculate and update the label based on current expiry time."""
         if not self.expires:
             return
-        now = datetime.now(timezone.utc)
-        remaining = (self.expires - now).total_seconds()
-        if remaining > 0:
-            new_label = f"{self.base_label} ({format_time_remaining(remaining)})"
-        else:
-            new_label = f"{self.base_label} (expired)"
+        new_label = self._compute_expiry_label()
         if new_label != self.label_text:
             self.update_label(new_label)
 
@@ -326,8 +332,6 @@ class Sidebar(Vertical):
                     expires=expires,
                 )
                 item.add_class("md-item")
-                # Calculate initial label with expiry
-                item.refresh_expiry_label()
                 listview.mount(item, after=cat_mds)
 
     def update_watches(
@@ -383,8 +387,6 @@ class Sidebar(Vertical):
                     expires=expires,
                 )
                 item.add_class("watch-item")
-                # Calculate initial label with expiry
-                item.refresh_expiry_label()
                 listview.mount(item, after=cat_watches)
 
     def add_wfo(self, wfo_id: str) -> None:
