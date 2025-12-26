@@ -242,8 +242,6 @@ class WxDXX(App):
         self._is_refreshing: bool = False
         # WFOs currently loading
         self._loading_wfos: set[str] = set()
-        # Timer handle for restart capability
-        self._refresh_timer = None
         # Last successful refresh time for status bar display
         self._last_refresh_time: datetime | None = None
 
@@ -273,19 +271,33 @@ class WxDXX(App):
 
     async def on_mount(self) -> None:
         """Initialize the app by fetching active products and start auto-refresh."""
-        self.run_worker(self._refresh_all_data_with_indicator())
-        self._refresh_timer = self.set_interval(
-            self._config.refresh_interval, self._auto_refresh
-        )
-
-        # Restore saved WFOs to sidebar
+        # Restore saved WFOs to sidebar first (sync operation)
         sidebar = self.query_one(Sidebar)
         for wfo_id in self._tracked_wfos:
             sidebar.add_wfo(wfo_id)
 
-    def _auto_refresh(self) -> None:
-        """Trigger auto-refresh of all data."""
-        self.run_worker(self._refresh_all_data_with_indicator())
+        # Start initial refresh and auto-refresh loop
+        # Using call_later to ensure they run after mount completes
+        self.call_later(self._start_background_tasks)
+
+    def _start_background_tasks(self) -> None:
+        """Start background refresh tasks after mount."""
+        self.run_worker(self._initial_refresh_and_loop())
+
+    async def _initial_refresh_and_loop(self) -> None:
+        """Run initial refresh, then start the auto-refresh loop."""
+        await self._refresh_all_data_with_indicator()
+        await self._auto_refresh_loop()
+
+    async def _auto_refresh_loop(self) -> None:
+        """Background worker that handles periodic auto-refresh."""
+        while True:
+            await asyncio.sleep(self._config.refresh_interval)
+            if self._is_refreshing:
+                self.log.debug("Auto-refresh skipped - already refreshing")
+                continue
+            self.log.debug("Auto-refresh triggered")
+            await self._refresh_all_data_with_indicator()
 
     async def _refresh_all_data_with_indicator(self) -> None:
         """Refresh all data with status bar indicator."""
@@ -589,12 +601,7 @@ class WxDXX(App):
         if new_interval is not None and new_interval != self._config.refresh_interval:
             self._config.refresh_interval = new_interval
             self._config.save()
-
-            # Restart the timer with new interval
-            if self._refresh_timer:
-                self._refresh_timer.stop()
-            self._refresh_timer = self.set_interval(new_interval, self._auto_refresh)
-
+            # The auto-refresh loop will pick up the new interval on its next cycle
             self.notify(f"Refresh interval set to {new_interval}s")
 
     def action_toggle_focus(self) -> None:
