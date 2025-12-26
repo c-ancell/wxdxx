@@ -73,10 +73,13 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 **Textual gotchas:**
 - `DOMQuery` objects are truthy even when empty; use `len(list(query(...))) == 0` to check for no results
 - Status bar indicators (like "Refreshing...") need forced updates via `_update_clock_display()` when state changes - the 1-second polling interval is too slow to catch fast operations
+- `set_interval` timers don't fire reliably from App context; use async worker loop pattern instead (see `_auto_refresh_loop()` in app.py)
+- When starting background tasks in `on_mount`, use `call_later()` to defer `run_worker()` calls until after mount completes
 
 **SPC/NWS parsing gotchas:**
 - Always deduplicate when parsing HTML link lists with `re.findall()` - pages often have multiple links to the same product (header, table, sidebar, etc.). Use `set()` before returning.
 - The `_is_refreshing` flag now guards against concurrent refreshes - check it at the start of `_refresh_all_data_with_indicator()`
+- UGC expiry parsing: Don't assume future month rollover when expiry day < current day - the product may just be expired. Only roll back to previous month when current day is 1-2 and expiry day is 28-31.
 
 ## Current Features
 - Convective Outlooks (Day 1-3) fetched from SPC
