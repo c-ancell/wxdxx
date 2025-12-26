@@ -100,21 +100,9 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - Sidebar items color-coded using NWS conventions: red for tornado watches, yellow for SVR, magenta for PDS; outlook risk levels (TSTM→HIGH); MD watch probability; WFO warnings (TOR/SVR/FFW/WSW)
 - Sidebar shows time-until-expiry for MDs and Watches (e.g., "MD 2457 (2h 15m)", "TOR 127 (4h 30m)")
 - Status bar shows "Refreshed: Xm ago" timestamp that updates dynamically
+- WFO Active Alerts: Hazard alerts (warnings, watches, advisories) fetched by forecast zone and displayed alongside text products with NWS color coding and expiry countdowns
 
 ## TODO / Not Yet Implemented
-
-### Epic: WFO Active Alerts
-**Background:** The NWS API separates text products (`/products`) from hazard alerts (`/alerts/active`). We currently only query text products (AFD, HWO, SPS, NOW, ZFP). Warnings, watches, and advisories (Flood Watch, Winter Storm Warning, etc.) are in the alerts system and require querying by forecast zone.
-
-**Technical approach:** Each WFO has `responsibleForecastZones` (via `/offices/{wfoId}`). Query `/alerts/active?zone=...` with those zones to get active hazard alerts for that WFO's coverage area.
-
-- [ ] Add `get_wfo_zones(wfo_id)` method to NWSClient to fetch responsible forecast zones
-- [ ] Refactor `get_active_alerts()` to accept zone list and filter by zones instead of senderName
-- [ ] Cache WFO zones (they rarely change) - consider long TTL or persist to config
-- [ ] Call `get_active_alerts()` during `_refresh_wfo_products()`
-- [ ] Update sidebar to display alerts alongside text products
-- [ ] Add color coding for alerts based on severity/event type (red for warnings, orange for watches, yellow for advisories)
-- [ ] Show expiry countdown for alerts (they have `expires` field)
 
 ### Epic: SPS Expiry Filtering
 **Background:** SPS (Special Weather Statement) products describe active weather events with specific expiry times (e.g., "thunderstorms until 10 AM"). However, the NWS API's `expirationTime` field is not populated for text products. The expiry is embedded in the UGC (Universal Geographic Code) header within the product text.

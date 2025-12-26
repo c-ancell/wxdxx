@@ -4,6 +4,7 @@ from datetime import datetime
 
 import httpx
 
+from ..models.alert import AlertSeverity, AlertUrgency, WFOAlert
 from ..models.wfo import WFOProduct
 
 
@@ -39,6 +40,25 @@ class NWSClient:
             return response.status_code == 200
         except httpx.HTTPError:
             return False
+
+    async def get_wfo_zones(self, wfo_id: str) -> list[str]:
+        """Fetch responsible forecast zones for a WFO.
+
+        Returns:
+            List of zone IDs (e.g., ["OKZ025", "OKZ026", ...])
+        """
+        response = await self._client.get(f"/offices/{wfo_id.upper()}")
+        response.raise_for_status()
+        data = response.json()
+
+        # Extract zone IDs from URIs
+        # Format: "https://api.weather.gov/zones/forecast/OKZ025"
+        zones = []
+        for zone_uri in data.get("responsibleForecastZones", []):
+            zone_id = zone_uri.split("/")[-1]
+            if zone_id:
+                zones.append(zone_id)
+        return zones
 
     async def get_products_by_type(
         self, wfo_id: str, product_type: str, limit: int = 5
@@ -88,42 +108,89 @@ class NWSClient:
             name=data.get("productName"),
         )
 
-    async def get_active_alerts(self, wfo_id: str) -> list[WFOProduct]:
-        """Fetch active alerts for a WFO."""
-        response = await self._client.get(
-            "/alerts/active",
-            params={"message_type": "alert"},
-        )
-        response.raise_for_status()
-        data = response.json()
+    async def get_active_alerts(self, zones: list[str]) -> list[WFOAlert]:
+        """Fetch active alerts for specified forecast zones.
 
-        alerts = []
-        wfo_upper = wfo_id.upper()
-        for feature in data.get("features", []):
-            props = feature.get("properties", {})
-            sender = props.get("senderName", "")
-            # Check if this alert is from the specified WFO
-            if wfo_upper not in sender.upper():
-                continue
+        Args:
+            zones: List of zone IDs to query (e.g., ["OKZ025", "OKZ026"])
 
-            alert_id = props.get("id", "").split("/")[-1]
-            description = props.get("description", "")
-            instruction = props.get("instruction", "")
-            text = description
-            if instruction:
-                text += "\n\n" + instruction
+        Returns:
+            List of WFOAlert objects for active alerts in those zones.
+        """
+        if not zones:
+            return []
 
-            alerts.append(
-                WFOProduct(
-                    id=alert_id,
-                    wfo=wfo_upper,
-                    product_type=props.get("event", "ALERT"),
-                    issued=self._parse_datetime(props.get("effective")),
-                    text=text,
-                    name=props.get("headline"),
-                )
+        all_alerts: list[WFOAlert] = []
+        seen_ids: set[str] = set()
+
+        # NWS API accepts comma-separated zone list
+        # Chunk into groups of 50 to avoid URL length limits
+        for i in range(0, len(zones), 50):
+            zone_chunk = zones[i : i + 50]
+            zone_param = ",".join(zone_chunk)
+
+            response = await self._client.get(
+                "/alerts/active",
+                params={"zone": zone_param, "message_type": "alert"},
             )
-        return alerts
+            response.raise_for_status()
+            data = response.json()
+
+            for feature in data.get("features", []):
+                props = feature.get("properties", {})
+                alert_id = props.get("id", "")
+
+                # Deduplicate alerts that appear in multiple zones
+                if alert_id in seen_ids:
+                    continue
+                seen_ids.add(alert_id)
+
+                # Extract WFO from sender (format: "NWS Norman OK")
+                sender = props.get("senderName", "")
+                wfo = ""
+                if "NWS " in sender:
+                    # Try to extract WFO code from the response
+                    # senderCode is more reliable if available
+                    sender_code = props.get("senderCode", "")
+                    if sender_code:
+                        wfo = sender_code.upper()
+                    else:
+                        # Fallback: extract from sender name
+                        parts = sender.replace("NWS ", "").split()
+                        if parts:
+                            wfo = parts[0][:3].upper()
+
+                # Parse severity and urgency
+                severity_str = props.get("severity", "Unknown")
+                urgency_str = props.get("urgency", "Unknown")
+
+                try:
+                    severity = AlertSeverity(severity_str)
+                except ValueError:
+                    severity = AlertSeverity.UNKNOWN
+
+                try:
+                    urgency = AlertUrgency(urgency_str)
+                except ValueError:
+                    urgency = AlertUrgency.UNKNOWN
+
+                all_alerts.append(
+                    WFOAlert(
+                        id=alert_id.split("/")[-1] if "/" in alert_id else alert_id,
+                        wfo=wfo,
+                        event=props.get("event", "Unknown"),
+                        headline=props.get("headline"),
+                        description=props.get("description"),
+                        instruction=props.get("instruction"),
+                        severity=severity,
+                        urgency=urgency,
+                        effective=self._parse_datetime(props.get("effective")),
+                        expires=self._parse_datetime(props.get("expires")),
+                        area_desc=props.get("areaDesc"),
+                    )
+                )
+
+        return all_alerts
 
     def _parse_datetime(self, dt_str: str | None) -> datetime | None:
         """Parse ISO datetime string."""

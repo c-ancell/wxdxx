@@ -14,6 +14,7 @@ from .api.nws import NWSClient
 from .api.spc import SPCClient
 from .cache import TTLCache
 from .config import AppConfig
+from .models.alert import WFOAlert
 from .models.md import MesoscaleDiscussion
 from .models.outlook import ConvectiveOutlook, OutlookDay
 from .models.watch import Watch
@@ -193,6 +194,8 @@ class WxDXX(App):
     WATCH_CACHE_TTL = 600  # 10 minutes
     WFO_LIST_CACHE_TTL = 120  # 2 minutes
     WFO_PRODUCT_CACHE_TTL = 1800  # 30 minutes
+    WFO_ZONES_CACHE_TTL = 86400  # 24 hours (zones rarely change)
+    WFO_ALERTS_CACHE_TTL = 120  # 2 minutes (alerts change frequently)
 
     def __init__(self) -> None:
         super().__init__()
@@ -221,6 +224,12 @@ class WxDXX(App):
         )
         self._cached_wfo_products: TTLCache[str, WFOProduct] = TTLCache(
             default_ttl=self.WFO_PRODUCT_CACHE_TTL, max_size=100
+        )
+        self._wfo_zones_cache: TTLCache[str, list[str]] = TTLCache(
+            default_ttl=self.WFO_ZONES_CACHE_TTL, max_size=50
+        )
+        self._wfo_alerts_cache: TTLCache[str, list[WFOAlert]] = TTLCache(
+            default_ttl=self.WFO_ALERTS_CACHE_TTL, max_size=50
         )
         self._tracked_wfos: set[str] = set(self._config.tracked_wfos)
         # Current product timing for status bar display
@@ -432,6 +441,12 @@ class WxDXX(App):
                 "Press 'w' to add a Weather Forecast Office.\n\n"
                 "Enter a 3-letter WFO ID (e.g., OUN, FWD, ICT) to track products from that office.",
             )
+        elif item_id.startswith("alert-"):
+            # Alert selected - format: alert-{WFO}-{alert_id}
+            parts = item_id.split("-", 2)
+            if len(parts) == 3:
+                wfo_id, alert_id = parts[1], parts[2]
+                await self._load_alert(wfo_id, alert_id)
         elif item_id.startswith("wfo-") and "-header" in item_id:
             # WFO header clicked - show info about this WFO
             self._set_product_timing()
@@ -547,6 +562,8 @@ class WxDXX(App):
         self._cached_watches.clear()
         self._wfo_list_cache.clear()
         self._cached_wfo_products.clear()
+        self._wfo_alerts_cache.clear()
+        # Note: _wfo_zones_cache is NOT cleared (zones rarely change)
         self.run_worker(self._refresh_all_data_with_indicator())
 
     def action_help(self) -> None:
@@ -665,7 +682,7 @@ class WxDXX(App):
         self.run_worker(self._refresh_wfo_products(wfo_id))
 
     async def _refresh_wfo_products(self, wfo_id: str) -> None:
-        """Refresh products for a specific WFO."""
+        """Refresh products and alerts for a specific WFO."""
         self._loading_wfos.add(wfo_id)
         self._update_clock_display()
 
@@ -692,15 +709,46 @@ class WxDXX(App):
             except Exception:
                 return []
 
+        async def fetch_alerts() -> list[WFOAlert]:
+            """Fetch alerts for this WFO's zones."""
+            # Check alert cache first
+            cached_alerts = self._wfo_alerts_cache.get(wfo_id)
+            if cached_alerts is not None:
+                return cached_alerts
+
+            # Get zones (cached long-term)
+            zones = self._wfo_zones_cache.get(wfo_id)
+            if zones is None:
+                try:
+                    zones = await self.nws_client.get_wfo_zones(wfo_id)
+                    self._wfo_zones_cache.set(wfo_id, zones)
+                except Exception:
+                    zones = []
+
+            if not zones:
+                return []
+
+            # Fetch alerts for zones
+            try:
+                alerts = await self.nws_client.get_active_alerts(zones)
+                self._wfo_alerts_cache.set(wfo_id, alerts)
+                return alerts
+            except Exception:
+                return []
+
         try:
             sidebar = self.query_one(Sidebar)
-            # Fetch all product types in parallel
+            # Fetch products and alerts in parallel
             results = await asyncio.gather(
-                *[fetch_product_type(pt) for pt in DEFAULT_PRODUCT_TYPES]
+                *[fetch_product_type(pt) for pt in DEFAULT_PRODUCT_TYPES],
+                fetch_alerts(),
             )
-            # Flatten results
-            products_data = [item for sublist in results for item in sublist]
-            sidebar.update_wfo_products(wfo_id, products_data)
+            # Separate product results from alerts
+            product_results = results[:-1]
+            alerts = results[-1]
+            # Flatten product results
+            products_data = [item for sublist in product_results for item in sublist]
+            sidebar.update_wfo_products(wfo_id, products_data, alerts)
         finally:
             self._loading_wfos.discard(wfo_id)
             self._update_clock_display()
@@ -726,6 +774,23 @@ class WxDXX(App):
         except Exception as e:
             self._set_product_timing()
             product_view.show_error(f"Failed to fetch product: {e}")
+
+    async def _load_alert(self, wfo_id: str, alert_id: str) -> None:
+        """Load and display an alert."""
+        product_view = self.query_one(ProductView)
+
+        # Try to find in cache
+        cached_alerts = self._wfo_alerts_cache.get(wfo_id)
+        if cached_alerts:
+            for alert in cached_alerts:
+                if alert.id == alert_id or alert.sidebar_id.endswith(alert_id):
+                    self._set_product_timing(issued=alert.effective, expires=alert.expires)
+                    product_view.show_product(alert.title, alert.text)
+                    return
+
+        # Not found in cache - show error (alerts should always be in cache)
+        self._set_product_timing()
+        product_view.show_error("Alert no longer available. Try refreshing.")
 
 
 def main() -> None:

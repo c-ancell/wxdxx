@@ -37,6 +37,7 @@ class WFOProduct(BaseModel):
     wfo: str  # WFO identifier (e.g., "OUN")
     product_type: str  # Product type code (e.g., "AFD")
     issued: datetime | None = None
+    expires: datetime | None = None  # For products with expiry (e.g., SPS)
     text: str | None = None  # May be None until loaded
     name: str | None = None  # Product name from API
 
