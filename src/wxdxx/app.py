@@ -753,10 +753,10 @@ class WxDXX(App):
 
     def action_toggle_focus(self) -> None:
         """Toggle focus between sidebar and content view."""
-        from textual.widgets import ListView
+        from .widgets.sidebar import VimListView
 
         product_view = self.query_one(ProductView)
-        sidebar_list = self.query_one("#sidebar-list", ListView)
+        sidebar_list = self.query_one("#sidebar-list", VimListView)
 
         if product_view.has_focus:
             sidebar_list.focus()

@@ -25,9 +25,9 @@ HELP_TEXT = """\
   w          Add a WFO to track
   W          Remove a tracked WFO
 
-[bold]Content Scrolling[/bold]
-  j / ↓      Scroll down one line
-  k / ↑      Scroll up one line
+[bold]Scrolling (Sidebar & Content)[/bold]
+  j / ↓      Move down one item/line
+  k / ↑      Move up one item/line
   d          Page down
   u          Page up
   g          Jump to top

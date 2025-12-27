@@ -3,9 +3,33 @@
 from datetime import datetime, timezone
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical
 from textual.message import Message
 from textual.widgets import Label, ListItem, ListView, Static
+
+
+class VimListView(ListView):
+    """ListView with vim-style keyboard navigation."""
+
+    BINDINGS = [
+        Binding("j", "cursor_down", "Down", show=False),
+        Binding("k", "cursor_up", "Up", show=False),
+        Binding("g", "first", "Top", show=False),
+        Binding("G", "last", "Bottom", show=False),
+        Binding("d", "page_down", "Page Down", show=False),
+        Binding("u", "page_up", "Page Up", show=False),
+    ]
+
+    def action_page_down(self) -> None:
+        """Move cursor down by approximately one page (10 items)."""
+        for _ in range(10):
+            self.action_cursor_down()
+
+    def action_page_up(self) -> None:
+        """Move cursor up by approximately one page (10 items)."""
+        for _ in range(10):
+            self.action_cursor_up()
 
 
 def format_time_remaining(seconds: float) -> str:
@@ -434,7 +458,7 @@ class Sidebar(Vertical):
             self.item_id = item_id
 
     def compose(self) -> ComposeResult:
-        yield ListView(
+        yield VimListView(
             # Outlooks category
             ListItem(Label("▾ Outlooks", classes="category-header"), id="cat-outlooks"),
             SidebarItem("Day 1", "outlook-day1", indent=1),
