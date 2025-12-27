@@ -36,6 +36,9 @@ ENV/
 .coverage
 htmlcov/
 
+# PyInstaller
+*.spec
+
 # Misc
 .DS_Store
 *.log
