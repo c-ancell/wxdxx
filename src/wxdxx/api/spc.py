@@ -41,7 +41,7 @@ class SPCClient:
             base_url=self.BASE_URL,
             timeout=30.0,
             headers={
-                "User-Agent": "WxDXX/0.1.0 (https://github.com/c-ancell/wxdxx, wxdxxapp@gmail.com)"
+                "User-Agent": "WxDXX/0.1.1 (https://github.com/c-ancell/wxdxx, wxdxxapp@gmail.com)"
             },
         )
 
