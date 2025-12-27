@@ -69,6 +69,26 @@ Run tests with:
 ### TODO Tracking
 When the user asks to add a TODO, always add it to the "TODO / Not Yet Implemented" section in this file. You may also add inline `# TODO:` comments in the code if it helps with context, but this file is the canonical source for tracking all TODOs.
 
+### Versioning
+We use [Semantic Versioning](https://semver.org/) with git tags. Version is stored in `pyproject.toml` and read at runtime.
+
+**When to tag a new version:**
+- **Patch (0.1.x)**: Bug fixes, parser updates for API changes, documentation updates
+- **Minor (0.x.0)**: New features (new product types, new UI elements, new hotkeys), non-breaking changes
+- **Major (x.0.0)**: Breaking changes, major UI overhauls - always discuss with user first
+
+**Tagging workflow:**
+1. Update version in `pyproject.toml`
+2. Update `CHANGELOG.md` with new section
+3. Commit: `git commit -m "Bump version to vX.Y.Z"`
+4. Tag: `git tag -a vX.Y.Z -m "Release description"`
+
+**Guidelines for Claude:**
+- Proactively suggest a version bump after completing significant features or bug fixes
+- Batch multiple small changes into a single version bump when reasonable
+- For alpha (0.x.y), be liberal with minor bumps for new features
+- Never bump to 1.0.0 without explicit user approval
+
 ### Development Notes
 
 **Textual gotchas:**
@@ -121,7 +141,6 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 
 ### Spikes (Research/Discussion)
 - Research ways we can be better stewards of the data sources we're using (SPC, NWS API) and suggest the top 5 most impactful changes. Consider: rate limiting, caching strategies, User-Agent best practices, error handling for API outages, respecting robots.txt, reducing unnecessary requests.
-- Discuss versioning strategy as we prepare for an alpha release. Topics: semantic versioning (semver), git tagging workflow, changelog generation, version display in app (e.g., help screen or status bar), pyproject.toml version management, when to bump major/minor/patch.
 
 ### Architecture
 - Screens directory contains unused stubs (OutlooksScreen, WatchesScreen, etc.) from early development. The current single-screen architecture with sidebar + ProductView is simpler and works well for this app's scope. Could delete the stubs or revisit if the app grows significantly more complex, but not a priority.
