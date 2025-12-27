@@ -149,7 +149,6 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 - Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 - Add "R" (SHIFT+r) for hard refresh: Currently 'r' clears all caches and refreshes. Consider making 'r' a soft refresh (use cached data if valid) and 'R' a hard refresh (clear all caches first). This would make auto-refresh and 'r' behave the same way.
-- Implement text-based reference maps: WFO areas, counties/zones affected by warnings, and potentially other geographic reference displays
 - METAR support
 - AFD trend analysis: Track AFD content across issuances to detect changes in forecast confidence for major weather events. Flag increasing/decreasing confidence, highlight surprises vs long-range expectations, and alert users to "things to keep an eye on."
 
@@ -166,8 +165,42 @@ Findings from spike research on SPC/NWS API best practices. SPC robots.txt has 1
 
 5. ~~**Smart cache invalidation**~~: ✅ Done - Implemented unified `ProductCache` in cache.py with structured keys (`source:category:identifier`), targeted invalidation (`invalidate_by_source`, `invalidate_by_pattern`), content state tracking (empty detection), and staleness tracking. Replaced 10 separate TTLCache instances with single ProductCache. See cache.py for implementation.
 
+### Epic: Text-Based Reference Maps
+Display geographic context for warnings, watches, MDs, and WFO coverage areas using ASCII/text rendering in the TUI.
+
+**Use cases:**
+1. Warning context - See which counties/zones are affected ("where is this happening?")
+2. WFO coverage - Understand which WFO covers which area
+3. MD/Watch areas - Visualize geographic extent of SPC products
+
+**NWS data sources identified:**
+- GeoJSON geometry in api.weather.gov alert responses
+- Public Forecast Zone shapefiles: https://www.weather.gov/gis/PublicZones
+- Zone-County correlation: https://www.weather.gov/gis/ZoneCounty
+- CWA (County Warning Area) boundaries for WFO coverage
+
+**Open questions:**
+1. Resolution vs. complexity - State-level (feasible) vs. county/zone-level (3000+ polygons)?
+2. Static vs. dynamic - Pre-made ASCII templates vs. runtime GeoJSON→ASCII conversion?
+3. Integration - Modal screen, inline in ProductView, or separate panel?
+4. Data bundling - Fetch on-demand, bundle simplified boundaries, or cache locally?
+
+**Spikes to complete before implementation:**
+
+1. **Explore MapSCII rendering approach**: Study https://github.com/rastapasta/mapscii to understand Braille-based map rendering. Could we port concepts to Python/Textual? What resolution is achievable?
+
+2. **Inspect NWS alert geometry**: Fetch a real warning with geometry from api.weather.gov, examine GeoJSON structure. How complex are the polygons? Do we get state/county identifiers or just coordinates?
+
+3. **Prototype ASCII US map**: Hand-draw a simple US map with state outlines (~40 lines tall). Test rendering in a Textual widget. Can individual states be highlighted legibly with Rich styling?
+
+4. **Evaluate Braille vs. block characters**: Test terminal compatibility for Braille characters (⠿⣿). Compare visual quality against standard block characters (█▀▄). What's the practical resolution difference?
+
+5. **UGC-to-state mapping**: We already parse UGC codes from warnings. Build a mapping from zone/county codes to state abbreviations. How complete can we make this without external data?
+
+**Potential MVP (after spikes):** Pre-generated ASCII US map with state outlines, highlight affected states based on UGC codes. Limits detail but covers most use cases with minimal complexity.
+
 ### Spikes (Research/Discussion)
-(None currently)
+(None currently - see Epic sections above for spike items)
 
 ### Architecture
 - Screens directory contains unused stubs (OutlooksScreen, WatchesScreen, etc.) from early development. The current single-screen architecture with sidebar + ProductView is simpler and works well for this app's scope. Could delete the stubs or revisit if the app grows significantly more complex, but not a priority.
