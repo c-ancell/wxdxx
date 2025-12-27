@@ -139,6 +139,8 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 - Add "R" (SHIFT+r) for hard refresh: Currently 'r' clears all caches and refreshes. Consider making 'r' a soft refresh (use cached data if valid) and 'R' a hard refresh (clear all caches first). This would make auto-refresh and 'r' behave the same way.
 - Implement text-based reference maps: WFO areas, counties/zones affected by warnings, and potentially other geographic reference displays
+- METAR support
+- Handle empty MDs/watches on initial issuance: SPC sometimes publishes MDs and watches before the full content is available (appears in sidebar but content window is empty). Temporarily increase refresh rate for that specific product until full content is published and viewable.
 
 ### Spikes (Research/Discussion)
 - Research ways we can be better stewards of the data sources we're using (SPC, NWS API) and suggest the top 5 most impactful changes. Consider: rate limiting, caching strategies, User-Agent best practices, error handling for API outages, respecting robots.txt, reducing unnecessary requests.
