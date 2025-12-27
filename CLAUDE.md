@@ -105,6 +105,7 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - Status bar shows "Refreshed: Xm ago" timestamp that updates dynamically
 - WFO Active Alerts: Hazard alerts (warnings, watches, advisories) fetched by forecast zone and displayed alongside text products with NWS color coding and expiry countdowns
 - SPS Expiry Filtering: Special Weather Statements parsed for UGC header expiry times; expired SPS products automatically filtered from sidebar with countdown display
+- Unread indicators: New/updated products show a filled circle (●) in sidebar; circle disappears when product is viewed. Dark circle for highlighted items, light circle for regular items.
 
 ## TODO / Not Yet Implemented
 
@@ -112,7 +113,6 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 - Add "R" (SHIFT+r) for hard refresh: Currently 'r' clears all caches and refreshes. Consider making 'r' a soft refresh (use cached data if valid) and 'R' a hard refresh (clear all caches first). This would make auto-refresh and 'r' behave the same way.
-- Unread indicators: When products arrive/update in sidebar, show a filled circle (●) to the left of the product name indicating "unread". Circle disappears once product is loaded into main content view. Use dark circle for highlighted (colored) items, light circle for regular items.
 
 ### Epic: News Ticker for Watches/Warnings
 **Concept:** A scrolling news-ticker bar at the top of the UI showing new watches and warnings issued nationwide. Headlines scroll infinitely.

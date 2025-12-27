@@ -244,6 +244,8 @@ class WxDXX(App):
         self._loading_wfos: set[str] = set()
         # Last successful refresh time for status bar display
         self._last_refresh_time: datetime | None = None
+        # Track which sidebar items have been read (viewed in content pane)
+        self._read_items: set[str] = set()
 
     def _set_product_timing(
         self,
@@ -361,9 +363,9 @@ class WxDXX(App):
                 (md.number, md.concerning, md.watch_probability, md.expires)
                 for md in active_mds
             ]
-            sidebar.update_mds(md_data)
+            sidebar.update_mds(md_data, read_items=self._read_items)
         except Exception as e:
-            sidebar.update_mds([])
+            sidebar.update_mds([], read_items=self._read_items)
             self.notify(f"Failed to fetch MDs: {e}", severity="error")
 
         # Fetch watches (use cache if available)
@@ -385,9 +387,9 @@ class WxDXX(App):
                 (w.number, w.watch_type.value, w.is_pds, w.expires)
                 for w in active_watches
             ]
-            sidebar.update_watches(watch_data)
+            sidebar.update_watches(watch_data, read_items=self._read_items)
         except Exception as e:
-            sidebar.update_watches([])
+            sidebar.update_watches([], read_items=self._read_items)
             self.notify(f"Failed to fetch watches: {e}", severity="error")
 
         # Fetch outlook risk levels for sidebar coloring (use cache if available)
@@ -458,7 +460,7 @@ class WxDXX(App):
             parts = item_id.split("-", 2)
             if len(parts) == 3:
                 wfo_id, alert_id = parts[1], parts[2]
-                await self._load_alert(wfo_id, alert_id)
+                await self._load_alert(wfo_id, alert_id, item_id)
         elif item_id.startswith("wfo-") and "-header" in item_id:
             # WFO header clicked - show info about this WFO
             self._set_product_timing()
@@ -474,7 +476,7 @@ class WxDXX(App):
             if len(parts) == 3:
                 wfo_id, product_id = parts[1], parts[2]
                 if product_id not in ("loading", "none"):
-                    await self._load_wfo_product(product_id)
+                    await self._load_wfo_product(product_id, item_id)
 
     async def _load_outlook(self, day: OutlookDay) -> None:
         """Load and display a convective outlook."""
@@ -522,6 +524,12 @@ class WxDXX(App):
     async def _load_md(self, md_num: int) -> None:
         """Load and display a specific mesoscale discussion."""
         product_view = self.query_one(ProductView)
+        sidebar = self.query_one(Sidebar)
+        item_id = f"md-{md_num}"
+
+        # Mark as read
+        self._read_items.add(item_id)
+        sidebar.mark_item_as_read(item_id)
 
         # Check cache first
         cached = self._cached_mds.get(md_num)
@@ -544,6 +552,12 @@ class WxDXX(App):
     async def _load_watch(self, watch_num: int) -> None:
         """Load and display a specific watch."""
         product_view = self.query_one(ProductView)
+        sidebar = self.query_one(Sidebar)
+        item_id = f"watch-{watch_num}"
+
+        # Mark as read
+        self._read_items.add(item_id)
+        sidebar.mark_item_as_read(item_id)
 
         # Check cache first
         cached = self._cached_watches.get(watch_num)
@@ -767,14 +781,19 @@ class WxDXX(App):
             alerts = results[-1]
             # Flatten product results
             products_data = [item for sublist in product_results for item in sublist]
-            sidebar.update_wfo_products(wfo_id, products_data, alerts)
+            sidebar.update_wfo_products(wfo_id, products_data, alerts, read_items=self._read_items)
         finally:
             self._loading_wfos.discard(wfo_id)
             self._update_clock_display()
 
-    async def _load_wfo_product(self, product_id: str) -> None:
+    async def _load_wfo_product(self, product_id: str, item_id: str) -> None:
         """Load and display a WFO product."""
         product_view = self.query_one(ProductView)
+        sidebar = self.query_one(Sidebar)
+
+        # Mark as read
+        self._read_items.add(item_id)
+        sidebar.mark_item_as_read(item_id)
 
         # Check cache
         cached = self._cached_wfo_products.get(product_id)
@@ -794,9 +813,14 @@ class WxDXX(App):
             self._set_product_timing()
             product_view.show_error(f"Failed to fetch product: {e}")
 
-    async def _load_alert(self, wfo_id: str, alert_id: str) -> None:
+    async def _load_alert(self, wfo_id: str, alert_id: str, item_id: str) -> None:
         """Load and display an alert."""
         product_view = self.query_one(ProductView)
+        sidebar = self.query_one(Sidebar)
+
+        # Mark as read
+        self._read_items.add(item_id)
+        sidebar.mark_item_as_read(item_id)
 
         # Try to find in cache
         cached_alerts = self._wfo_alerts_cache.get(wfo_id)

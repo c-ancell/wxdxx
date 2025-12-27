@@ -28,16 +28,21 @@ class SidebarItem(ListItem):
         id: str | None = None,
         severity_class: str | None = None,
         expires: datetime | None = None,
+        unread: bool = False,
     ) -> None:
         super().__init__(id=id)
         self.base_label = label  # Label without expiry time
         self.item_id = item_id
         self.indent = indent
         self.expires = expires
+        self._unread = unread
+        self._has_severity = severity_class is not None
         # Calculate initial label with expiry (before compose runs)
         self.label_text = self._compute_expiry_label()
         if severity_class:
             self.add_class(severity_class)
+        if unread:
+            self.add_class("unread")
 
     def _compute_expiry_label(self) -> str:
         """Compute the label text including expiry time if applicable."""
@@ -49,15 +54,41 @@ class SidebarItem(ListItem):
             return f"{self.base_label} ({format_time_remaining(remaining)})"
         return f"{self.base_label} (expired)"
 
-    def compose(self) -> ComposeResult:
+    def _get_display_text(self) -> str:
+        """Get the full display text including indent and unread indicator."""
         prefix = "  " * self.indent
-        yield Label(f"{prefix}{self.label_text}")
+        if self._unread:
+            # Use different circle colors based on whether item has severity styling
+            circle = "[#333333]●[/] " if self._has_severity else "[#aaaaaa]●[/] "
+            return f"{prefix}{circle}{self.label_text}"
+        return f"{prefix}{self.label_text}"
+
+    def compose(self) -> ComposeResult:
+        yield Label(self._get_display_text(), markup=True)
 
     def update_label(self, new_label: str) -> None:
         """Update the displayed label text."""
         self.label_text = new_label
-        prefix = "  " * self.indent
-        self.query_one(Label).update(f"{prefix}{new_label}")
+        self.query_one(Label).update(self._get_display_text())
+
+    def mark_as_read(self) -> None:
+        """Mark this item as read (remove unread indicator)."""
+        if self._unread:
+            self._unread = False
+            self.remove_class("unread")
+            self.query_one(Label).update(self._get_display_text())
+
+    def mark_as_unread(self) -> None:
+        """Mark this item as unread (show indicator)."""
+        if not self._unread:
+            self._unread = True
+            self.add_class("unread")
+            self.query_one(Label).update(self._get_display_text())
+
+    @property
+    def is_unread(self) -> bool:
+        """Check if this item is unread."""
+        return self._unread
 
     def refresh_expiry_label(self) -> None:
         """Recalculate and update the label based on current expiry time."""
@@ -443,13 +474,17 @@ class Sidebar(Vertical):
         return None  # Low probability, no highlighting
 
     def update_mds(
-        self, mds: list[tuple[int, str | None, int | None, datetime | None]]
+        self,
+        mds: list[tuple[int, str | None, int | None, datetime | None]],
+        read_items: set[str] | None = None,
     ) -> None:
         """Update the MDs section with active discussions.
 
         Args:
             mds: List of (md_number, concerning_text, watch_probability, expires) tuples
+            read_items: Set of item_ids that have been read (won't show unread indicator)
         """
+        read_items = read_items or set()
         listview = self.query_one("#sidebar-list", ListView)
 
         # Remove existing MD items (placeholder or previous items)
@@ -475,26 +510,32 @@ class Sidebar(Vertical):
             # Add each MD as a sidebar item (in reverse so they appear in order)
             for md_num, concerning, watch_prob, expires in reversed(mds):
                 base_label = f"MD {md_num}"
+                item_id = f"md-{md_num}"
                 severity_class = self._get_md_severity_class(watch_prob)
                 item = SidebarItem(
                     base_label,
-                    f"md-{md_num}",
+                    item_id,
                     indent=1,
                     severity_class=severity_class,
                     expires=expires,
+                    unread=item_id not in read_items,
                 )
                 item.add_class("md-item")
                 listview.mount(item, after=cat_mds)
 
     def update_watches(
-        self, watches: list[tuple[int, str, bool, datetime | None]]
+        self,
+        watches: list[tuple[int, str, bool, datetime | None]],
+        read_items: set[str] | None = None,
     ) -> None:
         """Update the Watches section with active watches.
 
         Args:
             watches: List of (watch_number, watch_type, is_pds, expires) tuples
                     watch_type is "tornado" or "severe_thunderstorm"
+            read_items: Set of item_ids that have been read (won't show unread indicator)
         """
+        read_items = read_items or set()
         listview = self.query_one("#sidebar-list", ListView)
 
         # Remove existing watch items
@@ -522,6 +563,7 @@ class Sidebar(Vertical):
                 prefix = "TOR" if watch_type == "tornado" else "SVR"
                 pds = " PDS" if is_pds else ""
                 base_label = f"{prefix} {watch_num}{pds}"
+                item_id = f"watch-{watch_num}"
 
                 # Determine severity class (PDS takes priority)
                 if is_pds:
@@ -533,10 +575,11 @@ class Sidebar(Vertical):
 
                 item = SidebarItem(
                     base_label,
-                    f"watch-{watch_num}",
+                    item_id,
                     indent=1,
                     severity_class=severity_class,
                     expires=expires,
+                    unread=item_id not in read_items,
                 )
                 item.add_class("watch-item")
                 listview.mount(item, after=cat_watches)
@@ -671,6 +714,7 @@ class Sidebar(Vertical):
         wfo_id: str,
         products: list[tuple[str, str, str, datetime | None]],  # (id, type, time, expires)
         alerts: list | None = None,  # list[WFOAlert]
+        read_items: set[str] | None = None,
     ) -> None:
         """Update the products and alerts list for a specific WFO.
 
@@ -678,7 +722,9 @@ class Sidebar(Vertical):
             wfo_id: The WFO identifier
             products: List of (product_id, product_type, time_str, expires) tuples
             alerts: Optional list of WFOAlert objects
+            read_items: Set of item_ids that have been read (won't show unread indicator)
         """
+        read_items = read_items or set()
         listview = self.query_one("#sidebar-list", ListView)
 
         # Remove existing items for this WFO
@@ -746,12 +792,14 @@ class Sidebar(Vertical):
         else:
             # Add in reverse order (so they appear in order)
             for item_data in reversed(all_items):
+                item_id = item_data["item_id"]
                 item = SidebarItem(
                     item_data["label"],
-                    item_data["item_id"],
+                    item_id,
                     indent=2,
                     severity_class=item_data["severity_class"],
                     expires=item_data.get("expires"),
+                    unread=item_id not in read_items,
                 )
                 item.add_class(f"wfo-{wfo_id}-item")
                 listview.mount(item, after=wfo_header)
@@ -783,3 +831,14 @@ class Sidebar(Vertical):
         item = event.item
         if isinstance(item, SidebarItem):
             self.post_message(self.ItemSelected(item.item_id))
+
+    def mark_item_as_read(self, item_id: str) -> None:
+        """Mark a sidebar item as read (remove unread indicator).
+
+        Args:
+            item_id: The item_id of the sidebar item to mark as read
+        """
+        for item in self.query(SidebarItem):
+            if item.item_id == item_id:
+                item.mark_as_read()
+                break
