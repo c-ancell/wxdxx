@@ -319,14 +319,17 @@ class WxDXX(App):
         self._is_refreshing = True
         self._update_clock_display()
         try:
-            await self._refresh_sidebar_data()
-            # Refresh ticker data (nationwide alerts + SPC watches)
-            await self._refresh_ticker_data()
-            # Refresh all WFOs in parallel
-            if self._tracked_wfos:
-                await asyncio.gather(
-                    *[self._refresh_wfo_products(wfo_id) for wfo_id in self._tracked_wfos]
-                )
+            # Build list of all refresh tasks
+            refresh_tasks = [
+                self._refresh_sidebar_data(),
+                self._refresh_ticker_data(),
+            ]
+            # Add WFO refresh tasks
+            for wfo_id in self._tracked_wfos:
+                refresh_tasks.append(self._refresh_wfo_products(wfo_id))
+
+            # Run all refresh tasks in parallel
+            await asyncio.gather(*refresh_tasks)
 
             # Ensure indicator shows for minimum time
             elapsed = time.monotonic() - start_time
@@ -348,23 +351,62 @@ class WxDXX(App):
             pass  # Widget may not be mounted yet
 
     async def _refresh_sidebar_data(self) -> None:
-        """Fetch MDs and watches and update the sidebar."""
+        """Fetch MDs, watches, and outlooks and update the sidebar."""
         sidebar = self.query_one(Sidebar)
         now = datetime.now(timezone.utc)
 
-        # Fetch MDs (use cache if available)
-        try:
-            mds = self._md_list_cache.get("active")
-            if mds is None:
-                mds = await self.spc_client.get_active_mds()
-                self._md_list_cache.set("active", mds)
-                # Also cache individual MDs
-                for md in mds:
-                    self._cached_mds.set(md.number, md)
+        # Fetch MDs, watches, and outlooks in parallel
+        async def fetch_mds() -> list[MesoscaleDiscussion]:
+            cached = self._md_list_cache.get("active")
+            if cached is not None:
+                return cached
+            mds = await self.spc_client.get_active_mds()
+            self._md_list_cache.set("active", mds)
+            for md in mds:
+                self._cached_mds.set(md.number, md)
+            return mds
 
-            # Filter out expired MDs
+        async def fetch_watches() -> list[Watch]:
+            cached = self._watch_list_cache.get("active")
+            if cached is not None:
+                return cached
+            watches = await self.spc_client.get_active_watches()
+            self._watch_list_cache.set("active", watches)
+            for watch in watches:
+                self._cached_watches.set(watch.number, watch)
+            return watches
+
+        async def fetch_outlook(day: OutlookDay) -> ConvectiveOutlook | None:
+            try:
+                cache_key = day.value
+                cached = self._outlook_cache.get(cache_key)
+                if cached is not None:
+                    return cached
+                outlook = await self.spc_client.get_outlook(day)
+                self._outlook_cache.set(cache_key, outlook)
+                return outlook
+            except Exception:
+                return None
+
+        # Run all fetches in parallel
+        results = await asyncio.gather(
+            fetch_mds(),
+            fetch_watches(),
+            fetch_outlook(OutlookDay.DAY1),
+            fetch_outlook(OutlookDay.DAY2),
+            fetch_outlook(OutlookDay.DAY3),
+            return_exceptions=True,
+        )
+
+        mds_result, watches_result, outlook1, outlook2, outlook3 = results
+
+        # Update MDs
+        if isinstance(mds_result, Exception):
+            sidebar.update_mds([], read_items=self._read_items)
+            self.notify(f"Failed to fetch MDs: {mds_result}", severity="error")
+        else:
             active_mds = [
-                md for md in mds
+                md for md in mds_result
                 if md.expires is None or md.expires > now
             ]
             md_data = [
@@ -372,23 +414,14 @@ class WxDXX(App):
                 for md in active_mds
             ]
             sidebar.update_mds(md_data, read_items=self._read_items)
-        except Exception as e:
-            sidebar.update_mds([], read_items=self._read_items)
-            self.notify(f"Failed to fetch MDs: {e}", severity="error")
 
-        # Fetch watches (use cache if available)
-        try:
-            watches = self._watch_list_cache.get("active")
-            if watches is None:
-                watches = await self.spc_client.get_active_watches()
-                self._watch_list_cache.set("active", watches)
-                # Also cache individual watches
-                for watch in watches:
-                    self._cached_watches.set(watch.number, watch)
-
-            # Filter out expired watches
+        # Update watches
+        if isinstance(watches_result, Exception):
+            sidebar.update_watches([], read_items=self._read_items)
+            self.notify(f"Failed to fetch watches: {watches_result}", severity="error")
+        else:
             active_watches = [
-                w for w in watches
+                w for w in watches_result
                 if w.expires is None or w.expires > now
             ]
             watch_data = [
@@ -396,25 +429,13 @@ class WxDXX(App):
                 for w in active_watches
             ]
             sidebar.update_watches(watch_data, read_items=self._read_items)
-        except Exception as e:
-            sidebar.update_watches([], read_items=self._read_items)
-            self.notify(f"Failed to fetch watches: {e}", severity="error")
 
-        # Fetch outlook risk levels for sidebar coloring (use cache if available)
-        for day in [OutlookDay.DAY1, OutlookDay.DAY2, OutlookDay.DAY3]:
-            try:
-                cache_key = day.value
-                outlook = self._outlook_cache.get(cache_key)
-                if outlook is None:
-                    outlook = await self.spc_client.get_outlook(day)
-                    self._outlook_cache.set(cache_key, outlook)
-
-                day_num = int(day.value.replace("day", ""))
+        # Update outlook risk levels
+        for day_num, outlook in [(1, outlook1), (2, outlook2), (3, outlook3)]:
+            if outlook is not None and not isinstance(outlook, Exception):
                 sidebar.update_outlook_risk(
                     day_num, outlook.max_risk.value if outlook.max_risk else None
                 )
-            except Exception:
-                pass  # Silently fail - risk will show when user clicks
 
     async def _refresh_ticker_data(self) -> None:
         """Refresh the news ticker with nationwide alerts and SPC watches."""

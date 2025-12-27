@@ -1,5 +1,6 @@
 """SPC API client for fetching weather products."""
 
+import asyncio
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -85,17 +86,19 @@ class SPCClient:
         response = await self._client.get(url)
         response.raise_for_status()
 
-        md_numbers = self._parse_md_list(response.text)
-        mds = []
+        md_numbers = self._parse_md_list(response.text)[:10]  # Limit to most recent 10
 
-        for num in md_numbers[:10]:  # Limit to most recent 10
+        if not md_numbers:
+            return []
+
+        async def fetch_md(num: int) -> MesoscaleDiscussion | None:
             try:
-                md = await self.get_md(num)
-                mds.append(md)
+                return await self.get_md(num)
             except httpx.HTTPError:
-                continue
+                return None
 
-        return mds
+        results = await asyncio.gather(*[fetch_md(num) for num in md_numbers])
+        return [md for md in results if md is not None]
 
     async def get_md(self, number: int) -> MesoscaleDiscussion:
         """Fetch a specific mesoscale discussion by number."""
@@ -126,17 +129,21 @@ class SPCClient:
         response = await self._client.get(url)
         response.raise_for_status()
 
-        watch_info = self._parse_watch_list(response.text)
-        watches = []
+        watch_info = self._parse_watch_list(response.text)[:10]  # Limit to most recent 10
 
-        for num, wtype in watch_info[:10]:  # Limit to most recent 10
+        if not watch_info:
+            return []
+
+        async def fetch_watch(num: int, wtype: WatchType) -> Watch | None:
             try:
-                watch = await self.get_watch(num, wtype)
-                watches.append(watch)
+                return await self.get_watch(num, wtype)
             except httpx.HTTPError:
-                continue
+                return None
 
-        return watches
+        results = await asyncio.gather(
+            *[fetch_watch(num, wtype) for num, wtype in watch_info]
+        )
+        return [w for w in results if w is not None]
 
     async def get_watch(self, number: int, watch_type: WatchType) -> Watch:
         """Fetch a specific watch by number."""

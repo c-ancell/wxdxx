@@ -1,5 +1,6 @@
 """NWS API client for fetching WFO products."""
 
+import asyncio
 import re
 from datetime import datetime, timezone
 
@@ -126,8 +127,8 @@ class NWSClient:
 
         # For SPS products, fetch full text to parse UGC expiry
         # (NWS API doesn't populate expirationTime for text products)
-        if product_type.upper() == "SPS":
-            for product in products:
+        if product_type.upper() == "SPS" and products:
+            async def fetch_sps_text(product: WFOProduct) -> None:
                 try:
                     full_product = await self.get_product(product.id)
                     product.text = full_product.text
@@ -135,6 +136,8 @@ class NWSClient:
                 except Exception:
                     # If fetch fails, leave expires as None (product will show without countdown)
                     pass
+
+            await asyncio.gather(*[fetch_sps_text(p) for p in products])
 
         return products
 
@@ -191,10 +194,7 @@ class NWSClient:
             "Tropical Storm Warning",
         }
 
-        all_alerts: list[WFOAlert] = []
         seen_ids: set[str] = set()
-        # For ticker, dedupe by WFO+event to avoid repetitive headlines
-        seen_wfo_events: set[str] = set()
         now = datetime.now(timezone.utc)
 
         # NWS API /alerts/active doesn't accept limit/status/message_type params
@@ -203,6 +203,8 @@ class NWSClient:
         response.raise_for_status()
         data = response.json()
 
+        # First pass: collect candidate alerts and their zone IDs (no WFO lookups yet)
+        candidates: list[tuple[dict, str]] = []  # (props, zone_id)
         for feature in data.get("features", []):
             props = feature.get("properties", {})
             alert_id = props.get("id", "")
@@ -222,15 +224,33 @@ class NWSClient:
                 continue
             seen_ids.add(alert_id)
 
-            # Extract WFO from the first affected zone
+            # Extract zone ID from the first affected zone
             affected_zones = props.get("affectedZones", [])
-            wfo = ""
+            zone_id = ""
             if affected_zones:
                 # Zone URL format: https://api.weather.gov/zones/forecast/NVZ019
                 first_zone_url = affected_zones[0]
                 zone_id = first_zone_url.split("/")[-1] if "/" in first_zone_url else ""
-                if zone_id:
-                    wfo = await self.get_zone_wfo(zone_id)
+
+            candidates.append((props, zone_id))
+
+        # Batch lookup all WFOs in parallel
+        unique_zones = list({zone_id for _, zone_id in candidates if zone_id})
+        if unique_zones:
+            wfo_results = await asyncio.gather(
+                *[self.get_zone_wfo(zone_id) for zone_id in unique_zones]
+            )
+            zone_to_wfo = dict(zip(unique_zones, wfo_results))
+        else:
+            zone_to_wfo = {}
+
+        # Second pass: build alerts with WFO info, dedupe by WFO+event
+        all_alerts: list[WFOAlert] = []
+        seen_wfo_events: set[str] = set()
+
+        for props, zone_id in candidates:
+            wfo = zone_to_wfo.get(zone_id, "") if zone_id else ""
+            event = props.get("event", "")
 
             # Create WFO+event key for deduplication
             wfo_key = f"{wfo}:{event}"
@@ -254,18 +274,19 @@ class NWSClient:
             except ValueError:
                 urgency = AlertUrgency.UNKNOWN
 
+            alert_id = props.get("id", "")
             all_alerts.append(
                 WFOAlert(
                     id=alert_id.split("/")[-1] if "/" in alert_id else alert_id,
                     wfo=wfo,
-                    event=props.get("event", "Unknown"),
+                    event=event,
                     headline=props.get("headline"),
                     description=props.get("description"),
                     instruction=props.get("instruction"),
                     severity=severity,
                     urgency=urgency,
                     effective=self._parse_datetime(props.get("effective")),
-                    expires=expires,  # Already parsed above
+                    expires=self._parse_datetime(props.get("expires")),
                     area_desc=props.get("areaDesc"),
                 )
             )
