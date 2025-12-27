@@ -140,7 +140,9 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 - Add "R" (SHIFT+r) for hard refresh: Currently 'r' clears all caches and refreshes. Consider making 'r' a soft refresh (use cached data if valid) and 'R' a hard refresh (clear all caches first). This would make auto-refresh and 'r' behave the same way.
 - Implement text-based reference maps: WFO areas, counties/zones affected by warnings, and potentially other geographic reference displays
 - METAR support
+- Bug: News ticker headline text color sometimes shows white instead of event-specific color when transitioning from "new" (background color) to regular state. Investigate color application in news_ticker.py.
 - Handle empty MDs/watches on initial issuance: SPC sometimes publishes MDs and watches before the full content is available (appears in sidebar but content window is empty). Temporarily increase refresh rate for that specific product until full content is published and viewable.
+- AFD trend analysis: Track AFD content across issuances to detect changes in forecast confidence for major weather events. Flag increasing/decreasing confidence, highlight surprises vs long-range expectations, and alert users to "things to keep an eye on."
 
 ### Epic: Data Source Stewardship
 Findings from spike research on SPC/NWS API best practices. SPC robots.txt has 10-second crawl-delay (targets search crawlers, not interactive apps). NWS API requires User-Agent with contact info and has generous rate limits with retry-after-5s on throttle.
@@ -149,11 +151,11 @@ Findings from spike research on SPC/NWS API best practices. SPC robots.txt has 1
 
 2. ~~**Retry with exponential backoff**~~: ✅ Done - Added retry logic (1s, 2s, 4s backoff, max 3 retries) in `_get()` methods. Retries on transport errors, timeouts, 5xx errors, and 429 rate limits.
 
-3. **Conditional requests (ETag/If-Modified-Since)** (Medium effort, High impact): Both SPC and NWS support HTTP caching headers. Store ETag/Last-Modified with cached data, send If-None-Match/If-Modified-Since on requests. Reduces bandwidth 80%+ for unchanged content. Especially valuable for outlooks and zones. **Next step:** Test actual headers returned by SPC/NWS endpoints before implementing - need to verify they return useful ETag/Last-Modified headers.
+3. ~~**Conditional requests (ETag/If-Modified-Since)**~~: ❌ Not feasible - Investigated 2025-12-27. Neither SPC nor NWS return `ETag` or `Last-Modified` headers, so conditional requests won't work. They do return `Cache-Control` with `max-age` (SPC: 120s, NWS alerts: 30s, NWS products: 120s), which our TTL-based caching already approximates.
 
 4. ~~**Request rate limiting**~~: ✅ Done - Added async semaphores to limit concurrent requests (SPC: 3, NWS: 8). See `_get()` wrapper methods in api/spc.py and api/nws.py.
 
-5. **Smart cache invalidation** (Medium effort, High impact): Current TTL-based caching doesn't support nuanced needs of planned features. Implement per-product staleness tracking, targeted refresh without full cache clear, and content availability monitoring (empty → populated transition). Enables empty MD/watch feature cleanly.
+5. ~~**Smart cache invalidation**~~: ✅ Done - Implemented unified `ProductCache` in cache.py with structured keys (`source:category:identifier`), targeted invalidation (`invalidate_by_source`, `invalidate_by_pattern`), content state tracking (empty detection), and staleness tracking. Replaced 10 separate TTLCache instances with single ProductCache. See cache.py for implementation.
 
 ### Spikes (Research/Discussion)
 (None currently)

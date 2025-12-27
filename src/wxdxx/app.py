@@ -12,7 +12,7 @@ from textual.widgets import Footer, Header, Static
 
 from .api.nws import NWSClient
 from .api.spc import SPCClient
-from .cache import TTLCache
+from .cache import ProductCache
 from .config import AppConfig
 from .models.alert import WFOAlert
 from .models.md import MesoscaleDiscussion
@@ -188,55 +188,14 @@ class WxDXX(App):
 
     AUTO_REFRESH_INTERVAL = 60  # seconds
 
-    # Cache TTL values (in seconds)
-    OUTLOOK_CACHE_TTL = 300  # 5 minutes
-    MD_LIST_CACHE_TTL = 120  # 2 minutes
-    WATCH_LIST_CACHE_TTL = 120  # 2 minutes
-    MD_CACHE_TTL = 600  # 10 minutes
-    WATCH_CACHE_TTL = 600  # 10 minutes
-    WFO_LIST_CACHE_TTL = 120  # 2 minutes
-    WFO_PRODUCT_CACHE_TTL = 1800  # 30 minutes
-    WFO_ZONES_CACHE_TTL = 86400  # 24 hours (zones rarely change)
-    WFO_ALERTS_CACHE_TTL = 120  # 2 minutes (alerts change frequently)
-    TICKER_CACHE_TTL = 60  # 1 minute (nationwide alerts for ticker)
-
     def __init__(self) -> None:
         super().__init__()
         # Load configuration
         self._config = AppConfig.load()
         self.spc_client = SPCClient()
         self.nws_client = NWSClient()
-        # TTL-based caches
-        self._outlook_cache: TTLCache[str, ConvectiveOutlook] = TTLCache(
-            default_ttl=self.OUTLOOK_CACHE_TTL, max_size=10
-        )
-        self._md_list_cache: TTLCache[str, list[MesoscaleDiscussion]] = TTLCache(
-            default_ttl=self.MD_LIST_CACHE_TTL, max_size=1
-        )
-        self._watch_list_cache: TTLCache[str, list[Watch]] = TTLCache(
-            default_ttl=self.WATCH_LIST_CACHE_TTL, max_size=1
-        )
-        self._cached_mds: TTLCache[int, MesoscaleDiscussion] = TTLCache(
-            default_ttl=self.MD_CACHE_TTL, max_size=50
-        )
-        self._cached_watches: TTLCache[int, Watch] = TTLCache(
-            default_ttl=self.WATCH_CACHE_TTL, max_size=50
-        )
-        self._wfo_list_cache: TTLCache[str, list[tuple[str, str, str]]] = TTLCache(
-            default_ttl=self.WFO_LIST_CACHE_TTL, max_size=50
-        )
-        self._cached_wfo_products: TTLCache[str, WFOProduct] = TTLCache(
-            default_ttl=self.WFO_PRODUCT_CACHE_TTL, max_size=100
-        )
-        self._wfo_zones_cache: TTLCache[str, list[str]] = TTLCache(
-            default_ttl=self.WFO_ZONES_CACHE_TTL, max_size=50
-        )
-        self._wfo_alerts_cache: TTLCache[str, list[WFOAlert]] = TTLCache(
-            default_ttl=self.WFO_ALERTS_CACHE_TTL, max_size=50
-        )
-        self._ticker_cache: TTLCache[str, list[WFOAlert]] = TTLCache(
-            default_ttl=self.TICKER_CACHE_TTL, max_size=1
-        )
+        # Unified product cache with targeted invalidation and state tracking
+        self._cache = ProductCache()
         self._tracked_wfos: set[str] = set(self._config.tracked_wfos)
         # Current product timing for status bar display
         self._current_product_issued: datetime | None = None
@@ -358,33 +317,32 @@ class WxDXX(App):
 
         # Fetch MDs, watches, and outlooks in parallel
         async def fetch_mds() -> list[MesoscaleDiscussion]:
-            cached = self._md_list_cache.get("active")
+            cached = self._cache.get_md_list()
             if cached is not None:
                 return cached
             mds = await self.spc_client.get_active_mds()
-            self._md_list_cache.set("active", mds)
+            self._cache.set_md_list(mds)
             for md in mds:
-                self._cached_mds.set(md.number, md)
+                self._cache.set_md(md.number, md)
             return mds
 
         async def fetch_watches() -> list[Watch]:
-            cached = self._watch_list_cache.get("active")
+            cached = self._cache.get_watch_list()
             if cached is not None:
                 return cached
             watches = await self.spc_client.get_active_watches()
-            self._watch_list_cache.set("active", watches)
+            self._cache.set_watch_list(watches)
             for watch in watches:
-                self._cached_watches.set(watch.number, watch)
+                self._cache.set_watch(watch.number, watch)
             return watches
 
         async def fetch_outlook(day: OutlookDay) -> ConvectiveOutlook | None:
             try:
-                cache_key = day.value
-                cached = self._outlook_cache.get(cache_key)
+                cached = self._cache.get_outlook(day.value)
                 if cached is not None:
                     return cached
                 outlook = await self.spc_client.get_outlook(day)
-                self._outlook_cache.set(cache_key, outlook)
+                self._cache.set_outlook(day.value, outlook)
                 return outlook
             except Exception:
                 return None
@@ -450,10 +408,10 @@ class WxDXX(App):
 
         # Fetch nationwide NWS alerts (use cache if available)
         try:
-            cached_alerts = self._ticker_cache.get("nationwide")
+            cached_alerts = self._cache.get_ticker_alerts()
             if cached_alerts is None:
                 cached_alerts = await self.nws_client.get_active_alerts_nationwide()
-                self._ticker_cache.set("nationwide", cached_alerts)
+                self._cache.set_ticker_alerts(cached_alerts)
 
             for alert in cached_alerts:
                 # Skip expired alerts
@@ -485,7 +443,7 @@ class WxDXX(App):
 
         # Add SPC watches from cached data
         try:
-            watches = self._watch_list_cache.get("active") or []
+            watches = self._cache.get_watch_list() or []
             for watch in watches:
                 # Skip expired watches
                 if watch.expires and watch.expires < now:
@@ -615,11 +573,10 @@ class WxDXX(App):
         """Load and display a convective outlook."""
         product_view = self.query_one(ProductView)
         sidebar = self.query_one(Sidebar)
-        cache_key = day.value  # "day1", "day2", "day3"
         day_num = int(day.value.replace("day", ""))
 
         # Check cache first
-        cached = self._outlook_cache.get(cache_key)
+        cached = self._cache.get_outlook(day.value)
         if cached:
             risk_str = f"Max Risk: {cached.max_risk.value}" if cached.max_risk else ""
             self._set_product_timing(
@@ -638,7 +595,7 @@ class WxDXX(App):
         product_view.show_loading(f"Fetching {day.value} outlook...")
         try:
             outlook = await self.spc_client.get_outlook(day)
-            self._outlook_cache.set(cache_key, outlook)
+            self._cache.set_outlook(day.value, outlook)
             risk_str = f"Max Risk: {outlook.max_risk.value}" if outlook.max_risk else ""
             self._set_product_timing(
                 issued=outlook.issued,
@@ -665,7 +622,7 @@ class WxDXX(App):
         sidebar.mark_item_as_read(item_id)
 
         # Check cache first
-        cached = self._cached_mds.get(md_num)
+        cached = self._cache.get_md(md_num)
         if cached:
             self._set_product_timing(issued=cached.issued, expires=cached.expires)
             product_view.show_product(cached.title, cached.text)
@@ -675,7 +632,7 @@ class WxDXX(App):
         product_view.show_loading(f"Fetching MD {md_num}...")
         try:
             md = await self.spc_client.get_md(md_num)
-            self._cached_mds.set(md_num, md)
+            self._cache.set_md(md_num, md)
             self._set_product_timing(issued=md.issued, expires=md.expires)
             product_view.show_product(md.title, md.text)
         except Exception as e:
@@ -693,7 +650,7 @@ class WxDXX(App):
         sidebar.mark_item_as_read(item_id)
 
         # Check cache first
-        cached = self._cached_watches.get(watch_num)
+        cached = self._cache.get_watch(watch_num)
         if cached:
             self._set_product_timing(issued=cached.issued, expires=cached.expires)
             product_view.show_product(cached.title, cached.text)
@@ -705,7 +662,7 @@ class WxDXX(App):
             # Try fetching as severe thunderstorm first (more common)
             from .models.watch import WatchType
             watch = await self.spc_client.get_watch(watch_num, WatchType.SEVERE_THUNDERSTORM)
-            self._cached_watches.set(watch_num, watch)
+            self._cache.set_watch(watch_num, watch)
             self._set_product_timing(issued=watch.issued, expires=watch.expires)
             product_view.show_product(watch.title, watch.text)
         except Exception as e:
@@ -714,16 +671,13 @@ class WxDXX(App):
 
     def action_refresh(self) -> None:
         """Force refresh - clear all caches and fetch fresh data."""
-        self._outlook_cache.clear()
-        self._md_list_cache.clear()
-        self._watch_list_cache.clear()
-        self._cached_mds.clear()
-        self._cached_watches.clear()
-        self._wfo_list_cache.clear()
-        self._cached_wfo_products.clear()
-        self._wfo_alerts_cache.clear()
-        self._ticker_cache.clear()
-        # Note: _wfo_zones_cache is NOT cleared (zones rarely change)
+        # Clear all SPC data
+        self._cache.invalidate_by_source("spc")
+        # Clear NWS data except zones (zones have 24hr TTL and rarely change)
+        self._cache.invalidate_by_pattern(source="nws", category="list")
+        self._cache.invalidate_by_pattern(source="nws", category="alert")
+        self._cache.invalidate_by_pattern(source="nws", category="product")
+        self._cache.invalidate_by_pattern(source="nws", category="ticker")
         self.run_worker(self._refresh_all_data_with_indicator())
 
     def action_help(self) -> None:
@@ -806,9 +760,8 @@ class WxDXX(App):
             self._tracked_wfos.remove(result)
             self.query_one(Sidebar).remove_wfo(result)
 
-            # Clear cached product lists for this WFO
-            for product_type in DEFAULT_PRODUCT_TYPES:
-                self._wfo_list_cache.invalidate(f"{result}:{product_type}")
+            # Clear cached product lists and alerts for this WFO
+            self._cache.invalidate_by_pattern(source="nws", identifier_prefix=f"{result}:")
 
             # Auto-save config
             self._config.tracked_wfos = list(self._tracked_wfos)
@@ -852,10 +805,8 @@ class WxDXX(App):
             product_type: str,
         ) -> list[tuple[str, str, str, datetime | None]]:
             """Fetch products for a single type, returning tuples for sidebar."""
-            cache_key = f"{wfo_id}:{product_type}"
-
             # Check cache first
-            cached = self._wfo_list_cache.get(cache_key)
+            cached = self._cache.get_wfo_product_list(wfo_id, product_type)
             if cached is not None:
                 return cached
 
@@ -878,7 +829,7 @@ class WxDXX(App):
                     )
                     for p in active_products
                 ]
-                self._wfo_list_cache.set(cache_key, result)
+                self._cache.set_wfo_product_list(wfo_id, product_type, result)
                 return result
             except Exception:
                 return []
@@ -886,16 +837,16 @@ class WxDXX(App):
         async def fetch_alerts() -> list[WFOAlert]:
             """Fetch alerts for this WFO's zones."""
             # Check alert cache first
-            cached_alerts = self._wfo_alerts_cache.get(wfo_id)
+            cached_alerts = self._cache.get_wfo_alerts(wfo_id)
             if cached_alerts is not None:
                 return cached_alerts
 
             # Get zones (cached long-term)
-            zones = self._wfo_zones_cache.get(wfo_id)
+            zones = self._cache.get_wfo_zones(wfo_id)
             if zones is None:
                 try:
                     zones = await self.nws_client.get_wfo_zones(wfo_id)
-                    self._wfo_zones_cache.set(wfo_id, zones)
+                    self._cache.set_wfo_zones(wfo_id, zones)
                 except Exception:
                     zones = []
 
@@ -905,7 +856,7 @@ class WxDXX(App):
             # Fetch alerts for zones
             try:
                 alerts = await self.nws_client.get_active_alerts(zones)
-                self._wfo_alerts_cache.set(wfo_id, alerts)
+                self._cache.set_wfo_alerts(wfo_id, alerts)
                 return alerts
             except Exception:
                 return []
@@ -937,7 +888,7 @@ class WxDXX(App):
         sidebar.mark_item_as_read(item_id)
 
         # Check cache
-        cached = self._cached_wfo_products.get(product_id)
+        cached = self._cache.get_wfo_product(product_id)
         if cached and cached.text:
             self._set_product_timing(issued=cached.issued)
             product_view.show_product(cached.title, cached.text)
@@ -947,7 +898,7 @@ class WxDXX(App):
         product_view.show_loading("Fetching product...")
         try:
             product = await self.nws_client.get_product(product_id)
-            self._cached_wfo_products.set(product_id, product)
+            self._cache.set_wfo_product(product_id, product)
             self._set_product_timing(issued=product.issued)
             product_view.show_product(product.title, product.text or "No content")
         except Exception as e:
@@ -964,7 +915,7 @@ class WxDXX(App):
         sidebar.mark_item_as_read(item_id)
 
         # Try to find in cache
-        cached_alerts = self._wfo_alerts_cache.get(wfo_id)
+        cached_alerts = self._cache.get_wfo_alerts(wfo_id)
         if cached_alerts:
             for alert in cached_alerts:
                 if alert.id == alert_id or alert.sidebar_id.endswith(alert_id):
