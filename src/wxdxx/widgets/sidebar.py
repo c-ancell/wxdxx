@@ -694,6 +694,9 @@ class Sidebar(Vertical):
         # Build combined list: alerts first (more urgent), then products
         all_items: list[dict] = []
 
+        # Track alert types to deduplicate products (prefer alert styling)
+        alert_types: set[str] = set()
+
         # Add alerts (filtered and sorted by severity)
         if alerts:
             now = datetime.now(timezone.utc)
@@ -714,15 +717,19 @@ class Sidebar(Vertical):
 
             for alert in active_alerts:
                 severity_class = self._get_alert_severity_class(alert.event)
+                # Use tracked wfo_id (not alert.wfo) to match cache key in _load_alert
                 all_items.append({
                     "label": alert.short_event,
-                    "item_id": alert.sidebar_id,
+                    "item_id": f"alert-{wfo_id}-{alert.id}",
                     "severity_class": severity_class,
                     "expires": alert.expires,
                 })
+                alert_types.add(alert.short_event)
 
-        # Add products
+        # Add products (skip if already shown as alert)
         for product_id, product_type, time_str, expires in products:
+            if product_type in alert_types:
+                continue  # Dedupe: prefer alert version for styling
             label = f"{product_type} {time_str}" if time_str else product_type
             severity_class = self._get_wfo_severity_class(product_type)
             all_items.append({
