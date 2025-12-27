@@ -114,6 +114,9 @@ class NewsTicker(Widget):
         if self._scroll_offset >= len(self._plain_text):
             self._scroll_offset = self._scroll_offset % len(self._plain_text)
             self._increment_appearance_counts()
+            # Adjust scroll offset if text got shorter (from is_new transition)
+            if self._plain_text and self._scroll_offset >= len(self._plain_text):
+                self._scroll_offset = self._scroll_offset % len(self._plain_text)
             # Filter out expired headlines and rebuild text if any were removed
             if self._filter_expired_headlines():
                 self._rebuild_plain_text()
@@ -137,11 +140,18 @@ class NewsTicker(Widget):
 
     def _increment_appearance_counts(self) -> None:
         """Increment appearance count for all headlines after a full scroll cycle."""
+        is_new_changed = False
         for headline in self._headlines:
             headline.appearance_count += 1
             # Update is_new status based on appearance count
-            if headline.appearance_count >= self.NEW_THRESHOLD_APPEARANCES:
+            if headline.is_new and headline.appearance_count >= self.NEW_THRESHOLD_APPEARANCES:
                 headline.is_new = False
+                is_new_changed = True
+
+        # Rebuild plain text if any headline transitioned from new to regular
+        # This ensures _plain_text matches is_new state for correct positioning
+        if is_new_changed:
+            self._rebuild_plain_text()
 
     def _filter_expired_headlines(self) -> bool:
         """Remove expired headlines from the list.

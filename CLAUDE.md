@@ -151,7 +151,6 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 - Add "R" (SHIFT+r) for hard refresh: Currently 'r' clears all caches and refreshes. Consider making 'r' a soft refresh (use cached data if valid) and 'R' a hard refresh (clear all caches first). This would make auto-refresh and 'r' behave the same way.
 - Implement text-based reference maps: WFO areas, counties/zones affected by warnings, and potentially other geographic reference displays
 - METAR support
-- Bug: News ticker headline text color sometimes shows white instead of event-specific color when transitioning from "new" (background color) to regular state. Investigate color application in news_ticker.py.
 - Handle empty MDs/watches on initial issuance: SPC sometimes publishes MDs and watches before the full content is available (appears in sidebar but content window is empty). Temporarily increase refresh rate for that specific product until full content is published and viewable.
 - AFD trend analysis: Track AFD content across issuances to detect changes in forecast confidence for major weather events. Flag increasing/decreasing confidence, highlight surprises vs long-range expectations, and alert users to "things to keep an eye on."
 
