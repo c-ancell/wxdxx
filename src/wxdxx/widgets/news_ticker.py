@@ -79,7 +79,7 @@ class NewsTicker(Widget):
 
     # Configuration
     SCROLL_SPEED = 1  # Characters per update interval
-    UPDATE_INTERVAL = 0.12  # Seconds between scroll updates (~8 chars/sec)
+    DEFAULT_UPDATE_INTERVAL = 0.12  # Seconds between scroll updates (~8 chars/sec)
     EXPIRY_CHECK_INTERVAL = 30.0  # Seconds between expiry checks
     SEPARATOR = " *** "
     NEW_THRESHOLD_APPEARANCES = 2  # Show "NEW" styling for this many full scrolls
@@ -90,6 +90,7 @@ class NewsTicker(Widget):
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
+        update_interval: float | None = None,
     ) -> None:
         super().__init__(name=name, id=id, classes=classes)
         self._headlines: list[TickerHeadline] = []
@@ -97,10 +98,14 @@ class NewsTicker(Widget):
         self._scroll_offset: int = 0
         self._known_ids: set[str] = set()
         self._paused: bool = False
+        self._update_interval = update_interval or self.DEFAULT_UPDATE_INTERVAL
+        self._scroll_timer: object | None = None
 
     def on_mount(self) -> None:
         """Start the scroll animation timer and expiry check timer."""
-        self.set_interval(self.UPDATE_INTERVAL, self._scroll_tick)
+        self._scroll_timer = self.set_interval(
+            self._update_interval, self._scroll_tick
+        )
         self.set_interval(self.EXPIRY_CHECK_INTERVAL, self._expiry_check_tick)
 
     def _scroll_tick(self) -> None:
@@ -397,3 +402,19 @@ class NewsTicker(Widget):
     def toggle_pause(self) -> None:
         """Toggle pause state."""
         self._paused = not self._paused
+
+    def set_update_interval(self, interval: float) -> None:
+        """Change the scroll speed by updating the timer interval.
+
+        Args:
+            interval: Seconds between scroll updates (lower = faster)
+        """
+        if interval == self._update_interval:
+            return
+
+        self._update_interval = interval
+
+        # Cancel existing timer and start new one with updated interval
+        if self._scroll_timer is not None:
+            self._scroll_timer.stop()
+        self._scroll_timer = self.set_interval(interval, self._scroll_tick)

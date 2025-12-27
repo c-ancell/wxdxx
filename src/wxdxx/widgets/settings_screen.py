@@ -1,15 +1,25 @@
 """Settings screen modal widget."""
 
+from dataclasses import dataclass
+
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Static
 
 
-class SettingsScreen(ModalScreen[int | None]):
+@dataclass
+class SettingsResult:
+    """Result from settings screen."""
+
+    refresh_interval: int
+    ticker_speed: int
+
+
+class SettingsScreen(ModalScreen[SettingsResult | None]):
     """Modal screen for application settings.
 
-    Returns the new refresh interval if changed, None if cancelled.
+    Returns SettingsResult with new values if saved, None if cancelled.
     """
 
     DEFAULT_CSS = """
@@ -75,10 +85,12 @@ class SettingsScreen(ModalScreen[int | None]):
         self,
         current_refresh_interval: int,
         tracked_wfos: list[str],
+        current_ticker_speed: int = 3,
     ) -> None:
         super().__init__()
         self._refresh_interval = current_refresh_interval
         self._tracked_wfos = list(tracked_wfos)
+        self._ticker_speed = current_ticker_speed
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -94,6 +106,17 @@ class SettingsScreen(ModalScreen[int | None]):
                     id="refresh-input",
                 )
                 yield Label("seconds (10-600)")
+
+            # Ticker Speed Section
+            yield Static("Ticker Speed", classes="settings-label")
+            with Horizontal(classes="settings-row"):
+                yield Input(
+                    value=str(self._ticker_speed),
+                    placeholder="3",
+                    max_length=1,
+                    id="ticker-speed-input",
+                )
+                yield Label("1-5 (1=slow, 5=fast)")
 
             # Tracked WFOs Section
             yield Static("Tracked WFOs", classes="settings-label")
@@ -127,6 +150,7 @@ class SettingsScreen(ModalScreen[int | None]):
     def _save_settings(self) -> None:
         """Validate and save settings."""
         refresh_input = self.query_one("#refresh-input", Input)
+        ticker_input = self.query_one("#ticker-speed-input", Input)
 
         try:
             new_interval = int(refresh_input.value)
@@ -139,7 +163,18 @@ class SettingsScreen(ModalScreen[int | None]):
             )
             return
 
-        self.dismiss(new_interval)
+        try:
+            new_ticker_speed = int(ticker_input.value)
+            if not (1 <= new_ticker_speed <= 5):
+                raise ValueError("Out of range")
+        except ValueError:
+            self.notify(
+                "Ticker speed must be a number between 1 and 5",
+                severity="error",
+            )
+            return
+
+        self.dismiss(SettingsResult(new_interval, new_ticker_speed))
 
     def action_close(self) -> None:
         """Close the settings screen."""

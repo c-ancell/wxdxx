@@ -13,7 +13,7 @@ from textual.widgets import Footer, Header, Static
 from .api.nws import NWSClient
 from .api.spc import SPCClient
 from .cache import ProductCache
-from .config import AppConfig
+from .config import TICKER_SPEED_INTERVALS, AppConfig
 from .models.alert import WFOAlert
 from .models.md import MesoscaleDiscussion
 from .models.outlook import ConvectiveOutlook, OutlookDay
@@ -22,7 +22,7 @@ from .models.wfo import DEFAULT_PRODUCT_TYPES, WFOProduct
 from .widgets.help_screen import HelpScreen
 from .widgets.news_ticker import NewsTicker, TickerHeadline
 from .widgets.product_view import ProductView
-from .widgets.settings_screen import SettingsScreen
+from .widgets.settings_screen import SettingsResult, SettingsScreen
 from .widgets.sidebar import Sidebar
 from .widgets.wfo_input import WFODialogMode, WFOInputDialog
 
@@ -229,7 +229,8 @@ class WxDXX(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield NewsTicker(id="news-ticker")
+        ticker_interval = TICKER_SPEED_INTERVALS.get(self._config.ticker_speed, 0.12)
+        yield NewsTicker(id="news-ticker", update_interval=ticker_interval)
         yield Horizontal(
             Sidebar(),
             ProductView(),
@@ -694,17 +695,35 @@ class WxDXX(App):
             SettingsScreen(
                 current_refresh_interval=self._config.refresh_interval,
                 tracked_wfos=list(self._tracked_wfos),
+                current_ticker_speed=self._config.ticker_speed,
             ),
             callback=self._on_settings_result,
         )
 
-    def _on_settings_result(self, new_interval: int | None) -> None:
+    def _on_settings_result(self, result: SettingsResult | None) -> None:
         """Handle settings screen result."""
-        if new_interval is not None and new_interval != self._config.refresh_interval:
-            self._config.refresh_interval = new_interval
+        if result is None:
+            return
+
+        changes = []
+
+        # Handle refresh interval change
+        if result.refresh_interval != self._config.refresh_interval:
+            self._config.refresh_interval = result.refresh_interval
+            changes.append(f"refresh interval to {result.refresh_interval}s")
+
+        # Handle ticker speed change
+        if result.ticker_speed != self._config.ticker_speed:
+            self._config.ticker_speed = result.ticker_speed
+            # Update the ticker widget with new interval
+            new_interval = TICKER_SPEED_INTERVALS.get(result.ticker_speed, 0.12)
+            ticker = self.query_one(NewsTicker)
+            ticker.set_update_interval(new_interval)
+            changes.append(f"ticker speed to {result.ticker_speed}")
+
+        if changes:
             self._config.save()
-            # The auto-refresh loop will pick up the new interval on its next cycle
-            self.notify(f"Refresh interval set to {new_interval}s")
+            self.notify(f"Updated {' and '.join(changes)}")
 
     def action_toggle_focus(self) -> None:
         """Toggle focus between sidebar and content view."""

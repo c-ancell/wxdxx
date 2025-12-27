@@ -85,7 +85,7 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 
 **Guidelines for Claude:**
 - Proactively suggest a version bump after completing significant features or bug fixes
-- Batch multiple small changes into a single version bump when reasonable
+- Batch multiple small changes into a single version bump when reasonable - suggest tagging every 3-4 commits or when pivoting to new work
 - For alpha (0.x.y), be liberal with minor bumps for new features
 - Never bump to 1.0.0 without explicit user approval
 

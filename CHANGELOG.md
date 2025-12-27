@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-12-27
+
+### Added
+
+- Configurable news ticker speed in settings (1-5 scale, where 1=slowest, 5=fastest)
+- Ticker speed persists across restarts in config file
+- Live ticker speed updates without app restart
+
 ## [0.1.3] - 2025-12-27
 
 ### Fixed
