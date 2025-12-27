@@ -15,13 +15,15 @@ class NWSClient:
 
     BASE_URL = "https://api.weather.gov"
     MAX_CONCURRENT_REQUESTS = 8  # NWS API is generous but we still limit
+    MAX_RETRIES = 3  # Max retry attempts (total attempts = MAX_RETRIES + 1)
+    RETRY_BACKOFF = (1.0, 2.0, 4.0)  # Exponential backoff delays in seconds
 
     def __init__(self) -> None:
         self._client = httpx.AsyncClient(
             base_url=self.BASE_URL,
             timeout=30.0,
             headers={
-                "User-Agent": "WxDXX/0.1.1 (https://github.com/c-ancell/wxdxx, wxdxxapp@gmail.com)",
+                "User-Agent": "WxDXX/0.1.2 (https://github.com/c-ancell/wxdxx, wxdxxapp@gmail.com)",
                 "Accept": "application/geo+json",
             },
         )
@@ -30,9 +32,27 @@ class NWSClient:
         self._zone_wfo_cache: dict[str, str] = {}
 
     async def _get(self, url: str, **kwargs) -> httpx.Response:
-        """Make a rate-limited GET request."""
+        """Make a rate-limited GET request with retry on transient failures."""
         async with self._semaphore:
-            return await self._client.get(url, **kwargs)
+            last_error: Exception | None = None
+            for attempt in range(self.MAX_RETRIES + 1):
+                try:
+                    response = await self._client.get(url, **kwargs)
+                    # Retry on server errors (5xx) or rate limit (429)
+                    if (response.status_code >= 500 or response.status_code == 429) and attempt < self.MAX_RETRIES:
+                        await asyncio.sleep(self.RETRY_BACKOFF[attempt])
+                        continue
+                    return response
+                except (httpx.TransportError, httpx.TimeoutException) as e:
+                    last_error = e
+                    if attempt < self.MAX_RETRIES:
+                        await asyncio.sleep(self.RETRY_BACKOFF[attempt])
+                    else:
+                        raise
+            # Should not reach here, but satisfy type checker
+            if last_error:
+                raise last_error
+            raise RuntimeError("Unexpected retry loop exit")
 
     async def close(self) -> None:
         """Close the HTTP client."""

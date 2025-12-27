@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2025-12-27
+
+### Added
+
+- Request rate limiting via async semaphores (SPC: 3 concurrent, NWS: 8 concurrent)
+- Retry with exponential backoff on transient failures (1s, 2s, 4s delays, max 3 retries)
+- Retries on transport errors, timeouts, 5xx server errors, and 429 rate limits
+
 ## [0.1.1] - 2025-12-27
 
 ### Changed

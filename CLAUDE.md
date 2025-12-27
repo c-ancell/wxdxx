@@ -147,7 +147,7 @@ Findings from spike research on SPC/NWS API best practices. SPC robots.txt has 1
 
 1. ~~**User-Agent with contact info**~~: ✅ Done - Updated to `WxDXX/0.1.0 (https://github.com/c-ancell/wxdxx, wxdxxapp@gmail.com)` in both api/spc.py and api/nws.py.
 
-2. **Retry with exponential backoff** (Medium effort, High impact): Currently failed requests return None or propagate errors. Add retry logic (1s, 2s, 4s backoff, max 3 attempts) using httpx transport or tenacity. Critical foundation for empty MD/watch polling feature.
+2. ~~**Retry with exponential backoff**~~: ✅ Done - Added retry logic (1s, 2s, 4s backoff, max 3 retries) in `_get()` methods. Retries on transport errors, timeouts, 5xx errors, and 429 rate limits.
 
 3. **Conditional requests (ETag/If-Modified-Since)** (Medium effort, High impact): Both SPC and NWS support HTTP caching headers. Store ETag/Last-Modified with cached data, send If-None-Match/If-Modified-Since on requests. Reduces bandwidth 80%+ for unchanged content. Especially valuable for outlooks and zones.
 
