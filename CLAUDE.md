@@ -149,7 +149,7 @@ Findings from spike research on SPC/NWS API best practices. SPC robots.txt has 1
 
 2. ~~**Retry with exponential backoff**~~: ✅ Done - Added retry logic (1s, 2s, 4s backoff, max 3 retries) in `_get()` methods. Retries on transport errors, timeouts, 5xx errors, and 429 rate limits.
 
-3. **Conditional requests (ETag/If-Modified-Since)** (Medium effort, High impact): Both SPC and NWS support HTTP caching headers. Store ETag/Last-Modified with cached data, send If-None-Match/If-Modified-Since on requests. Reduces bandwidth 80%+ for unchanged content. Especially valuable for outlooks and zones.
+3. **Conditional requests (ETag/If-Modified-Since)** (Medium effort, High impact): Both SPC and NWS support HTTP caching headers. Store ETag/Last-Modified with cached data, send If-None-Match/If-Modified-Since on requests. Reduces bandwidth 80%+ for unchanged content. Especially valuable for outlooks and zones. **Next step:** Test actual headers returned by SPC/NWS endpoints before implementing - need to verify they return useful ETag/Last-Modified headers.
 
 4. ~~**Request rate limiting**~~: ✅ Done - Added async semaphores to limit concurrent requests (SPC: 3, NWS: 8). See `_get()` wrapper methods in api/spc.py and api/nws.py.
 
