@@ -81,6 +81,7 @@ class NewsTicker(Widget):
     SCROLL_SPEED = 1  # Characters per update interval
     DEFAULT_UPDATE_INTERVAL = 0.12  # Seconds between scroll updates (~8 chars/sec)
     EXPIRY_CHECK_INTERVAL = 30.0  # Seconds between expiry checks
+    FLASH_INTERVAL = 0.3  # Seconds between flash toggles for first-cycle headlines
     SEPARATOR = " *** "
     NEW_THRESHOLD_APPEARANCES = 2  # Show "NEW" styling for this many full scrolls
 
@@ -100,6 +101,8 @@ class NewsTicker(Widget):
         self._paused: bool = False
         self._update_interval = update_interval or self.DEFAULT_UPDATE_INTERVAL
         self._scroll_timer: object | None = None
+        self._flash_state: bool = True  # Toggles for flashing effect on first-cycle headlines
+        self._initial_load_complete: bool = False  # Skip flash for headlines present at startup
 
     def on_mount(self) -> None:
         """Start the scroll animation timer and expiry check timer."""
@@ -107,6 +110,7 @@ class NewsTicker(Widget):
             self._update_interval, self._scroll_tick
         )
         self.set_interval(self.EXPIRY_CHECK_INTERVAL, self._expiry_check_tick)
+        self.set_interval(self.FLASH_INTERVAL, self._flash_tick)
 
     def _scroll_tick(self) -> None:
         """Advance the scroll position and update display."""
@@ -141,6 +145,14 @@ class NewsTicker(Widget):
             # Reset scroll offset if text got shorter
             if self._plain_text and self._scroll_offset >= len(self._plain_text):
                 self._scroll_offset = 0
+            self.refresh()
+
+    def _flash_tick(self) -> None:
+        """Toggle flash state for first-cycle headlines."""
+        # Only refresh if we have headlines in their first cycle
+        has_first_cycle = any(h.appearance_count == 0 for h in self._headlines)
+        if has_first_cycle:
+            self._flash_state = not self._flash_state
             self.refresh()
 
     def _increment_appearance_counts(self) -> None:
@@ -202,9 +214,14 @@ class NewsTicker(Widget):
         # Process each headline
         for headline in headlines:
             if headline.id in brand_new_ids:
-                # Brand new headline
-                headline.is_new = True
-                headline.appearance_count = 0
+                if not self._initial_load_complete:
+                    # Initial load: start headlines as regular (no flash/solid bg)
+                    headline.is_new = False
+                    headline.appearance_count = self.NEW_THRESHOLD_APPEARANCES
+                else:
+                    # Post-startup: brand new headline gets flash treatment
+                    headline.is_new = True
+                    headline.appearance_count = 0
             else:
                 # Seen before - try to preserve state from previous
                 prev = self._get_headline_by_id(headline.id)
@@ -218,6 +235,10 @@ class NewsTicker(Widget):
 
         # Update known IDs (remove expired ones)
         self._known_ids = new_ids
+
+        # Mark initial load as complete after first update
+        if not self._initial_load_complete:
+            self._initial_load_complete = True
 
         # Replace headlines list
         self._headlines = headlines
@@ -376,18 +397,34 @@ class NewsTicker(Widget):
         return headline.text
 
     def _get_headline_style(self, headline: TickerHeadline) -> str:
-        """Get the Rich style string for a headline."""
+        """Get the Rich style string for a headline.
+
+        Visual states based on appearance count:
+        - First cycle (count 0): Flash - alternates between solid bg and inverse
+        - Second cycle (count 1): Solid background color
+        - Regular (count 2+): Foreground text color only
+        """
         event_key = headline.event_type
         if headline.source == "spc":
             event_key = f"SPC_{headline.event_type}"
 
-        if headline.is_new:
-            # Background color for new headlines with appropriate text color
+        if headline.appearance_count == 0:
+            # First cycle: Flash effect - alternate between solid bg and inverse
+            colors = EVENT_BG_COLORS.get(event_key, (DEFAULT_BG_COLOR, "white"))
+            bg_color, text_color = colors
+            if self._flash_state:
+                # Solid background (visible state)
+                return f"bold {text_color} on {bg_color}"
+            else:
+                # Inverse/dim state for flash effect
+                return f"bold reverse {bg_color}"
+        elif headline.appearance_count == 1:
+            # Second cycle: Solid background color
             colors = EVENT_BG_COLORS.get(event_key, (DEFAULT_BG_COLOR, "white"))
             bg_color, text_color = colors
             return f"bold {text_color} on {bg_color}"
         else:
-            # Foreground color only for regular headlines
+            # Regular: Foreground color only
             fg_color = EVENT_FG_COLORS.get(event_key, DEFAULT_FG_COLOR)
             return f"bold {fg_color}"
 

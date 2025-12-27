@@ -142,12 +142,12 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 - WFO Active Alerts: Hazard alerts (warnings, watches, advisories) fetched by forecast zone and displayed alongside text products with NWS color coding and expiry countdowns
 - SPS Expiry Filtering: Special Weather Statements parsed for UGC header expiry times; expired SPS products automatically filtered from sidebar with countdown display
 - Unread indicators: New/updated products show a filled circle (●) in sidebar; circle disappears when product is viewed. Dark circle for highlighted items, light circle for regular items.
-- News Ticker: Scrolling bar below header showing nationwide NWS warnings and SPC watches. Headlines colored by event type (TOR=red, SVR=yellow, etc.). New alerts show with background color for first 2 scroll cycles, then text color only. Headlines sorted by severity (TOR > SVR > FFW > watches). Expired alerts are automatically filtered out on each scroll cycle.
+- News Ticker: Scrolling bar below header showing nationwide NWS warnings and SPC watches. Headlines colored by event type (TOR=red, SVR=yellow, etc.). New alerts (appearing after startup) flash for first scroll cycle, solid background for second cycle, then text color only. Headlines at startup display as regular (no flash). Headlines sorted by severity (TOR > SVR > FFW > watches). Expired alerts are automatically filtered out on each scroll cycle.
 
 ## TODO / Not Yet Implemented
 
 ### Small enhancements
-- News ticker: Flash new headlines on first scroll cycle, solid background on second cycle, then text color only. Currently shows solid background for both cycles before losing NEW designation.
+(None currently)
 
 ### Larger effort
 - Make sidebar sections collapsible
