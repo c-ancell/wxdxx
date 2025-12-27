@@ -9,7 +9,7 @@ description = "A TUI for viewing NWS text products from SPC, WPC, NHC, and local
 requires-python = ">=3.11"
 license = "MIT"
 authors = [
-    { name = "Colton Ancell" }
+    { name = "c-ancell" }
 ]
 keywords = ["weather", "nws", "spc", "wpc", "nhc", "tui", "terminal", "severe-weather"]
 classifiers = [
