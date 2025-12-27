@@ -509,7 +509,7 @@ class Sidebar(Vertical):
             read_items: Set of item_ids that have been read (won't show unread indicator)
         """
         read_items = read_items or set()
-        listview = self.query_one("#sidebar-list", ListView)
+        listview = self.query_one("#sidebar-list", VimListView)
 
         # Remove existing MD items (placeholder or previous items)
         for item in list(listview.query(".md-item")):
@@ -560,7 +560,7 @@ class Sidebar(Vertical):
             read_items: Set of item_ids that have been read (won't show unread indicator)
         """
         read_items = read_items or set()
-        listview = self.query_one("#sidebar-list", ListView)
+        listview = self.query_one("#sidebar-list", VimListView)
 
         # Remove existing watch items
         for item in list(listview.query(".watch-item")):
@@ -610,7 +610,7 @@ class Sidebar(Vertical):
 
     def add_wfo(self, wfo_id: str) -> None:
         """Add a new WFO section to the sidebar."""
-        listview = self.query_one("#sidebar-list", ListView)
+        listview = self.query_one("#sidebar-list", VimListView)
 
         # Remove the placeholder hint if it exists
         try:
@@ -643,7 +643,11 @@ class Sidebar(Vertical):
 
     def remove_wfo(self, wfo_id: str) -> None:
         """Remove a WFO and its products from the sidebar."""
-        listview = self.query_one("#sidebar-list", ListView)
+        listview = self.query_one("#sidebar-list", VimListView)
+
+        # Move cursor to first item before removing to avoid IndexError
+        # when the currently selected item is deleted
+        listview.index = 0
 
         # Remove the header
         try:
@@ -749,7 +753,7 @@ class Sidebar(Vertical):
             read_items: Set of item_ids that have been read (won't show unread indicator)
         """
         read_items = read_items or set()
-        listview = self.query_one("#sidebar-list", ListView)
+        listview = self.query_one("#sidebar-list", VimListView)
 
         # Remove existing items for this WFO
         for item in list(listview.query(f".wfo-{wfo_id}-item")):
