@@ -1,13 +1,20 @@
 """Help screen modal widget."""
 
+from importlib.metadata import version
+
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
+try:
+    __version__ = version("wxdxx")
+except Exception:
+    __version__ = "dev"
 
-HELP_TEXT = """\
-[bold cyan]WxDXX - Keyboard Shortcuts[/bold cyan]
+
+HELP_TEXT = f"""\
+[bold cyan]WxDXX v{__version__}[/bold cyan]
 
 [bold]General[/bold]
   q          Quit application
@@ -15,6 +22,7 @@ HELP_TEXT = """\
   s          Open settings
   ?          Toggle this help screen
   Tab        Switch focus between sidebar and content
+  M          Mark all sidebar items as read
 
 [bold]Navigation[/bold]
   1          View Day 1 Outlook

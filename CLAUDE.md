@@ -94,7 +94,7 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - Outlook validity shown as date range (e.g., "Valid: 251200Z - 261200Z")
 - MDs and Watches show countdown to expiry (e.g., "Expires: in 2h 15m")
 - Expired products (MDs, Watches) are automatically filtered from the sidebar
-- Keyboard: q=quit, r=refresh, s=settings, 1/2/3=Day 1/2/3 outlooks, ?=help, Tab=switch panel
+- Keyboard: q=quit, r=refresh, s=settings, 1/2/3=Day 1/2/3 outlooks, ?=help, Tab=switch panel, M=mark all read
 - Scrolling in content view: j/k=line up/down, d/u=page down/up, g/G=top/bottom, arrows also work
 - Help screen (?) shows all keyboard shortcuts
 - Settings screen (s) for configuring refresh interval
@@ -115,10 +115,13 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 ## TODO / Not Yet Implemented
 
 ### Larger effort
-- Add a "Mark All as Read" hotkey for the sidebar unread products
 - Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 - Add "R" (SHIFT+r) for hard refresh: Currently 'r' clears all caches and refreshes. Consider making 'r' a soft refresh (use cached data if valid) and 'R' a hard refresh (clear all caches first). This would make auto-refresh and 'r' behave the same way.
+
+### Spikes (Research/Discussion)
+- Research ways we can be better stewards of the data sources we're using (SPC, NWS API) and suggest the top 5 most impactful changes. Consider: rate limiting, caching strategies, User-Agent best practices, error handling for API outages, respecting robots.txt, reducing unnecessary requests.
+- Discuss versioning strategy as we prepare for an alpha release. Topics: semantic versioning (semver), git tagging workflow, changelog generation, version display in app (e.g., help screen or status bar), pyproject.toml version management, when to bump major/minor/patch.
 
 ### Architecture
 - Screens directory contains unused stubs (OutlooksScreen, WatchesScreen, etc.) from early development. The current single-screen architecture with sidebar + ProductView is simpler and works well for this app's scope. Could delete the stubs or revisit if the app grows significantly more complex, but not a priority.

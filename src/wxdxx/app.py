@@ -183,6 +183,7 @@ class WxDXX(App):
         Binding("1", "view_day1", "Day 1", show=False),
         Binding("2", "view_day2", "Day 2", show=False),
         Binding("3", "view_day3", "Day 3", show=False),
+        Binding("M", "mark_all_read", "Mark All Read", show=False),
     ]
 
     AUTO_REFRESH_INTERVAL = 60  # seconds
@@ -774,6 +775,13 @@ class WxDXX(App):
     async def action_view_day3(self) -> None:
         """Quick key to view Day 3 outlook."""
         await self._load_outlook(OutlookDay.DAY3)
+
+    def action_mark_all_read(self) -> None:
+        """Mark all sidebar items as read."""
+        sidebar = self.query_one(Sidebar)
+        count = sidebar.mark_all_as_read(self._read_items)
+        if count > 0:
+            self.notify(f"Marked {count} item{'s' if count != 1 else ''} as read")
 
     def action_add_wfo(self) -> None:
         """Show dialog to add a WFO."""

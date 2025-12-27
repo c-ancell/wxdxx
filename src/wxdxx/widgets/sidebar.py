@@ -870,3 +870,20 @@ class Sidebar(Vertical):
             if item.item_id == item_id:
                 item.mark_as_read()
                 break
+
+    def mark_all_as_read(self, read_items: set[str]) -> int:
+        """Mark all sidebar items as read.
+
+        Args:
+            read_items: Set to update with all item_ids that were marked as read
+
+        Returns:
+            Number of items that were marked as read
+        """
+        count = 0
+        for item in self.query(SidebarItem):
+            if item.is_unread:
+                item.mark_as_read()
+                read_items.add(item.item_id)
+                count += 1
+        return count
