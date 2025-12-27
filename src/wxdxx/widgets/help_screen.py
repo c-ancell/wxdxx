@@ -33,6 +33,7 @@ HELP_TEXT = f"""\
 [bold]WFO Products[/bold]
   w          Add a WFO to track
   W          Remove a tracked WFO
+  L          Lookup WFO details
 
 [bold]Scrolling (Sidebar & Content)[/bold]
   j / ↓      Move down one item/line

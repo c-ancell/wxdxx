@@ -75,6 +75,33 @@ class NWSClient:
         except httpx.HTTPError:
             return False
 
+    async def get_wfo_info(self, wfo_id: str) -> dict | None:
+        """Get detailed information about a WFO.
+
+        Args:
+            wfo_id: WFO ID (e.g., "OUN", "FWD")
+
+        Returns:
+            Dict with WFO details, or None if not found:
+            - id: WFO ID
+            - name: Full WFO name (e.g., "Norman, OK")
+            - address: Street address
+            - city: City
+            - state: State
+            - zipCode: ZIP code
+            - telephone: Phone number
+            - responsibleCounties: List of county URLs
+            - responsibleForecastZones: List of zone URLs
+            - responsibleFireZones: List of fire zone URLs
+        """
+        try:
+            response = await self._get(f"/offices/{wfo_id.upper()}")
+            if response.status_code != 200:
+                return None
+            return response.json()
+        except httpx.HTTPError:
+            return None
+
     async def get_zone_wfo(self, zone_id: str) -> str:
         """Get the WFO ID responsible for a forecast zone.
 

@@ -13,6 +13,7 @@ class WFODialogMode(Enum):
 
     ADD = "add"
     REMOVE = "remove"
+    LOOKUP = "lookup"
 
 
 class WFOInputDialog(ModalScreen[str | None]):
@@ -68,9 +69,12 @@ class WFOInputDialog(ModalScreen[str | None]):
         if self.mode == WFODialogMode.ADD:
             title = "Add WFO"
             button_label = "Add"
-        else:
+        elif self.mode == WFODialogMode.REMOVE:
             title = "Remove WFO"
             button_label = "Remove"
+        else:  # LOOKUP
+            title = "Lookup WFO"
+            button_label = "Lookup"
 
         with Vertical():
             yield Label(title, classes="dialog-title")

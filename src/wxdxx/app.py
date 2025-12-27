@@ -24,6 +24,7 @@ from .widgets.news_ticker import NewsTicker, TickerHeadline
 from .widgets.product_view import ProductView
 from .widgets.settings_screen import SettingsResult, SettingsScreen
 from .widgets.sidebar import Sidebar
+from .widgets.wfo_details_screen import WFODetailsScreen
 from .widgets.wfo_input import WFODialogMode, WFOInputDialog
 from .widgets.zone_map import ZoneMap
 
@@ -195,6 +196,7 @@ class WxDXX(App):
         Binding("s", "settings", "Settings", show=False),
         Binding("w", "add_wfo", "Add WFO", show=False),
         Binding("W", "remove_wfo", "Remove WFO", show=False),
+        Binding("L", "lookup_wfo", "Lookup WFO", show=False),
         Binding("?", "help", "Help"),  # Only show help hint; all shortcuts documented there
         Binding("tab", "toggle_focus", "Switch Panel", show=False),
         Binding("1", "view_day1", "Day 1", show=False),
@@ -979,6 +981,24 @@ class WxDXX(App):
             self.notify(f"Removed WFO {result}")
         elif result:
             self.notify(f"WFO {result} is not being tracked", severity="warning")
+
+    def action_lookup_wfo(self) -> None:
+        """Show dialog to lookup WFO details."""
+        self.push_screen(WFOInputDialog(WFODialogMode.LOOKUP), callback=self._on_lookup_wfo_result)
+
+    def _on_lookup_wfo_result(self, result: str | None) -> None:
+        """Handle result from lookup WFO dialog."""
+        if result:
+            self.run_worker(self._lookup_wfo(result))
+
+    async def _lookup_wfo(self, wfo_id: str) -> None:
+        """Fetch and display WFO details."""
+        self.notify(f"Looking up WFO {wfo_id}...")
+        wfo_info = await self.nws_client.get_wfo_info(wfo_id)
+        if wfo_info:
+            self.push_screen(WFODetailsScreen(wfo_id, wfo_info))
+        else:
+            self.notify(f"WFO {wfo_id} not found", severity="error")
 
     async def _add_wfo(self, wfo_id: str) -> None:
         """Add a WFO and fetch its products."""
