@@ -105,6 +105,17 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 - UTC display with "Z" suffix: Always convert to UTC with `.astimezone(timezone.utc)` before formatting. Just appending "Z" to `strftime()` output shows the datetime's original timezone, not UTC - e.g., midnight PST displays as "0000Z" but is actually 0800 UTC.
 - Expiry filtering for cached data: Filter at multiple points (API fetch, headline building, periodic timer, display) since cached data can become stale between refreshes.
 
+**ProductCache architecture (cache.py):**
+- Unified cache replaced 10 separate TTLCache instances. Single `self._cache` in app.py.
+- Key format: `{source}:{category}:{identifier}` (e.g., `spc:md:2462`, `nws:list:OUN:AFD`)
+- Sources: `spc`, `nws` (future: `wpc`, `nhc`)
+- Categories: `outlook`, `md`, `watch`, `alert`, `product`, `zone`, `list`, `ticker`
+- Use type-safe helpers: `get_md(num)`, `set_outlook(day, obj)`, `get_wfo_product_list(wfo, type)`, etc.
+- Empty content detection: Products with `content_text` < 100 chars get 30s TTL (vs normal category TTL)
+- Targeted invalidation: `invalidate_by_source("spc")`, `invalidate_by_pattern(source="nws", category="list")`
+- Zone cache intentionally NOT cleared on refresh (24hr TTL, zones rarely change)
+- `get_empty_products()` returns keys for empty content - useful for future fast-polling feature
+
 ## Current Features
 - Convective Outlooks (Day 1-3) fetched from SPC
 - Mesoscale Discussions - listed in sidebar, click to view full text
