@@ -23,10 +23,9 @@ jobs:
           - os: ubuntu-latest
             name: linux-x64
             artifact: wxdxx-linux-x64
-          # Note: linux-arm64 requires public repo or GitHub Team/Enterprise
-          # - os: ubuntu-24.04-arm
-          #   name: linux-arm64
-          #   artifact: wxdxx-linux-arm64
+          - os: ubuntu-24.04-arm
+            name: linux-arm64
+            artifact: wxdxx-linux-arm64
 
     runs-on: ${{ matrix.os }}
     name: Build (${{ matrix.name }})
