@@ -20,6 +20,7 @@ src/wxdxx/
 ├── widgets/
 │   ├── sidebar.py      # Navigation sidebar with categories
 │   ├── product_view.py # Scrollable content display
+│   ├── news_ticker.py  # Scrolling nationwide alerts ticker
 │   ├── help_screen.py  # Help modal with keyboard shortcuts
 │   ├── settings_screen.py # Settings modal for app configuration
 │   └── wfo_input.py    # WFO add/remove dialog
@@ -106,26 +107,15 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - WFO Active Alerts: Hazard alerts (warnings, watches, advisories) fetched by forecast zone and displayed alongside text products with NWS color coding and expiry countdowns
 - SPS Expiry Filtering: Special Weather Statements parsed for UGC header expiry times; expired SPS products automatically filtered from sidebar with countdown display
 - Unread indicators: New/updated products show a filled circle (●) in sidebar; circle disappears when product is viewed. Dark circle for highlighted items, light circle for regular items.
+- News Ticker: Scrolling bar below header showing nationwide NWS warnings and SPC watches. Headlines colored by event type (TOR=red, SVR=yellow, etc.). New alerts show with background color for first 2 scroll cycles, then text color only. Headlines sorted by severity (TOR > SVR > FFW > watches).
 
 ## TODO / Not Yet Implemented
 
 ### Larger effort
+- News ticker: Filter out expired alerts - currently showing alerts past their expiry time
 - Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 - Add "R" (SHIFT+r) for hard refresh: Currently 'r' clears all caches and refreshes. Consider making 'r' a soft refresh (use cached data if valid) and 'R' a hard refresh (clear all caches first). This would make auto-refresh and 'r' behave the same way.
-
-### Epic: News Ticker for Watches/Warnings
-**Concept:** A scrolling news-ticker bar at the top of the UI showing new watches and warnings issued nationwide. Headlines scroll infinitely.
-
-**Display format:**
-- New issuances: `***NEW: OUN issues Tornado Warning for Oklahoma County until 10pm CDT***`
-- Existing products: `EWX: Flash Flood Warning in effect until 28/1200 CDT`
-
-**Styling:**
-- NEW prefix headlines: Background colored using NWS conventions (red for TOR, yellow for SVR, etc.) for first 2 appearances
-- After 2 appearances: Text colored by convention on black background (e.g., red text on black for TOR)
-
-**To flesh out:** Data source, refresh strategy, headline priority/ordering, scroll speed, max headlines
 
 ### Architecture
 - Screens directory contains unused stubs (OutlooksScreen, WatchesScreen, etc.) from early development. The current single-screen architecture with sidebar + ProductView is simpler and works well for this app's scope. Could delete the stubs or revisit if the app grows significantly more complex, but not a priority.

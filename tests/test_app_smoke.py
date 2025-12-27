@@ -32,6 +32,11 @@ class TestAppSmoke:
             product_view = app.query_one(ProductView)
             assert product_view is not None
 
+            # Check for news ticker
+            from wxdxx.widgets.news_ticker import NewsTicker
+            ticker = app.query_one(NewsTicker)
+            assert ticker is not None
+
     @pytest.mark.asyncio
     async def test_app_quit_binding(self) -> None:
         """Verify the quit binding works."""

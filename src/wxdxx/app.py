@@ -20,6 +20,7 @@ from .models.outlook import ConvectiveOutlook, OutlookDay
 from .models.watch import Watch
 from .models.wfo import DEFAULT_PRODUCT_TYPES, WFOProduct
 from .widgets.help_screen import HelpScreen
+from .widgets.news_ticker import NewsTicker, TickerHeadline
 from .widgets.product_view import ProductView
 from .widgets.settings_screen import SettingsScreen
 from .widgets.sidebar import Sidebar
@@ -196,6 +197,7 @@ class WxDXX(App):
     WFO_PRODUCT_CACHE_TTL = 1800  # 30 minutes
     WFO_ZONES_CACHE_TTL = 86400  # 24 hours (zones rarely change)
     WFO_ALERTS_CACHE_TTL = 120  # 2 minutes (alerts change frequently)
+    TICKER_CACHE_TTL = 60  # 1 minute (nationwide alerts for ticker)
 
     def __init__(self) -> None:
         super().__init__()
@@ -231,6 +233,9 @@ class WxDXX(App):
         self._wfo_alerts_cache: TTLCache[str, list[WFOAlert]] = TTLCache(
             default_ttl=self.WFO_ALERTS_CACHE_TTL, max_size=50
         )
+        self._ticker_cache: TTLCache[str, list[WFOAlert]] = TTLCache(
+            default_ttl=self.TICKER_CACHE_TTL, max_size=1
+        )
         self._tracked_wfos: set[str] = set(self._config.tracked_wfos)
         # Current product timing for status bar display
         self._current_product_issued: datetime | None = None
@@ -264,6 +269,7 @@ class WxDXX(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        yield NewsTicker(id="news-ticker")
         yield Horizontal(
             Sidebar(),
             ProductView(),
@@ -314,6 +320,8 @@ class WxDXX(App):
         self._update_clock_display()
         try:
             await self._refresh_sidebar_data()
+            # Refresh ticker data (nationwide alerts + SPC watches)
+            await self._refresh_ticker_data()
             # Refresh all WFOs in parallel
             if self._tracked_wfos:
                 await asyncio.gather(
@@ -407,6 +415,107 @@ class WxDXX(App):
                 )
             except Exception:
                 pass  # Silently fail - risk will show when user clicks
+
+    async def _refresh_ticker_data(self) -> None:
+        """Refresh the news ticker with nationwide alerts and SPC watches."""
+        try:
+            ticker = self.query_one(NewsTicker)
+        except Exception:
+            return  # Ticker widget not mounted yet
+
+        headlines: list[TickerHeadline] = []
+        now = datetime.now(timezone.utc)
+
+        # Fetch nationwide NWS alerts (use cache if available)
+        try:
+            cached_alerts = self._ticker_cache.get("nationwide")
+            if cached_alerts is None:
+                cached_alerts = await self.nws_client.get_active_alerts_nationwide()
+                self._ticker_cache.set("nationwide", cached_alerts)
+
+            for alert in cached_alerts:
+                # Skip expired alerts
+                if alert.expires and alert.expires < now:
+                    continue
+
+                # Format expiry time in UTC
+                expires_str = ""
+                if alert.expires:
+                    expires_str = alert.expires.strftime("%d/%H%MZ")
+
+                # Build headline text
+                wfo = alert.wfo or "NWS"
+                text = f"{wfo}: {alert.event} in effect until {expires_str}"
+
+                headlines.append(
+                    TickerHeadline(
+                        id=f"nws-{alert.id}",
+                        text=text,
+                        event_type=alert.short_event,
+                        source="nws",
+                        wfo=alert.wfo,
+                        expires=alert.expires,
+                    )
+                )
+        except Exception as e:
+            self.log.warning(f"Failed to fetch nationwide alerts: {e}")
+
+        # Add SPC watches from cached data
+        try:
+            watches = self._watch_list_cache.get("active") or []
+            for watch in watches:
+                # Skip expired watches
+                if watch.expires and watch.expires < now:
+                    continue
+
+                # Format expiry time in UTC
+                expires_str = ""
+                if watch.expires:
+                    expires_str = watch.expires.strftime("%d/%H%MZ")
+
+                # Determine event type for coloring
+                event_type = "TOR" if watch.watch_type.value == "tornado" else "SVR"
+                watch_type_str = "Tornado" if event_type == "TOR" else "Severe Thunderstorm"
+                pds_str = " PDS" if watch.is_pds else ""
+
+                text = f"SPC: {watch_type_str} Watch #{watch.number}{pds_str} until {expires_str}"
+
+                headlines.append(
+                    TickerHeadline(
+                        id=f"spc-watch-{watch.number}",
+                        text=text,
+                        event_type=event_type,
+                        source="spc",
+                        expires=watch.expires,
+                    )
+                )
+        except Exception as e:
+            self.log.warning(f"Failed to add SPC watches to ticker: {e}")
+
+        # Sort headlines by priority (TOR > SVR > FFW > others)
+        priority_map = {
+            "TOR": 0,
+            "SVR": 1,
+            "FFW": 2,
+            "FLW": 3,
+            "BZW": 4,
+            "WSW": 5,
+            "WWY": 6,
+            "HWW": 7,
+            "EHW": 8,
+        }
+
+        def get_priority(h: TickerHeadline) -> int:
+            base_priority = priority_map.get(h.event_type, 10)
+            # SPC watches slightly lower priority than NWS warnings
+            if h.source == "spc":
+                base_priority += 0.5
+            return base_priority
+
+        headlines.sort(key=get_priority)
+
+        # Update ticker with headlines
+        ticker.update_headlines(headlines)
 
     async def on_unmount(self) -> None:
         """Clean up when app closes."""
@@ -589,6 +698,7 @@ class WxDXX(App):
         self._wfo_list_cache.clear()
         self._cached_wfo_products.clear()
         self._wfo_alerts_cache.clear()
+        self._ticker_cache.clear()
         # Note: _wfo_zones_cache is NOT cleared (zones rarely change)
         self.run_worker(self._refresh_all_data_with_indicator())
 

@@ -23,6 +23,8 @@ class NWSClient:
                 "Accept": "application/geo+json",
             },
         )
+        # Cache zone ID -> WFO ID mappings (zones rarely change)
+        self._zone_wfo_cache: dict[str, str] = {}
 
     async def close(self) -> None:
         """Close the HTTP client."""
@@ -41,6 +43,35 @@ class NWSClient:
             return response.status_code == 200
         except httpx.HTTPError:
             return False
+
+    async def get_zone_wfo(self, zone_id: str) -> str:
+        """Get the WFO ID responsible for a forecast zone.
+
+        Args:
+            zone_id: Zone ID (e.g., "NVZ019", "OKZ025")
+
+        Returns:
+            WFO ID (e.g., "VEF", "OUN") or empty string if not found.
+        """
+        # Check cache first
+        if zone_id in self._zone_wfo_cache:
+            return self._zone_wfo_cache[zone_id]
+
+        try:
+            response = await self._client.get(f"/zones/forecast/{zone_id}")
+            if response.status_code != 200:
+                return ""
+            data = response.json()
+            props = data.get("properties", {})
+            cwa = props.get("cwa", [])
+            if cwa and isinstance(cwa, list):
+                wfo = cwa[0].upper()
+                self._zone_wfo_cache[zone_id] = wfo
+                return wfo
+        except Exception:
+            pass
+
+        return ""
 
     async def get_wfo_zones(self, wfo_id: str) -> list[str]:
         """Fetch responsible forecast zones for a WFO.
@@ -121,6 +152,123 @@ class NWSClient:
             text=data.get("productText", ""),
             name=data.get("productName"),
         )
+
+    async def get_active_alerts_nationwide(
+        self,
+        limit: int = 100,
+    ) -> list[WFOAlert]:
+        """Fetch active alerts nationwide (no zone filter).
+
+        This method fetches severe weather alerts from across the country
+        for display in the news ticker.
+
+        Args:
+            limit: Maximum number of alerts to return
+
+        Returns:
+            List of WFOAlert objects for active alerts nationwide.
+        """
+        # Filter to high-priority weather events for the ticker
+        # Includes warnings and significant advisories
+        ticker_events = {
+            # Severe/Tornado
+            "Tornado Warning",
+            "Severe Thunderstorm Warning",
+            # Flood
+            "Flash Flood Warning",
+            "Flood Warning",
+            # Winter
+            "Blizzard Warning",
+            "Ice Storm Warning",
+            "Winter Storm Warning",
+            "Winter Weather Advisory",
+            # Wind
+            "High Wind Warning",
+            # Heat
+            "Excessive Heat Warning",
+            # Tropical
+            "Hurricane Warning",
+            "Tropical Storm Warning",
+        }
+
+        all_alerts: list[WFOAlert] = []
+        seen_ids: set[str] = set()
+        # For ticker, dedupe by WFO+event to avoid repetitive headlines
+        seen_wfo_events: set[str] = set()
+
+        # NWS API /alerts/active doesn't accept limit/status/message_type params
+        # Fetch all and filter in Python
+        response = await self._client.get("/alerts/active")
+        response.raise_for_status()
+        data = response.json()
+
+        for feature in data.get("features", []):
+            props = feature.get("properties", {})
+            alert_id = props.get("id", "")
+            event = props.get("event", "")
+
+            # Filter to ticker-worthy events only
+            if event not in ticker_events:
+                continue
+
+            # Deduplicate by alert ID
+            if alert_id in seen_ids:
+                continue
+            seen_ids.add(alert_id)
+
+            # Extract WFO from the first affected zone
+            affected_zones = props.get("affectedZones", [])
+            wfo = ""
+            if affected_zones:
+                # Zone URL format: https://api.weather.gov/zones/forecast/NVZ019
+                first_zone_url = affected_zones[0]
+                zone_id = first_zone_url.split("/")[-1] if "/" in first_zone_url else ""
+                if zone_id:
+                    wfo = await self.get_zone_wfo(zone_id)
+
+            # Create WFO+event key for deduplication
+            wfo_key = f"{wfo}:{event}"
+
+            # Skip if we already have this WFO+event combo
+            if wfo_key in seen_wfo_events:
+                continue
+            seen_wfo_events.add(wfo_key)
+
+            # Parse severity and urgency
+            severity_str = props.get("severity", "Unknown")
+            urgency_str = props.get("urgency", "Unknown")
+
+            try:
+                severity = AlertSeverity(severity_str)
+            except ValueError:
+                severity = AlertSeverity.UNKNOWN
+
+            try:
+                urgency = AlertUrgency(urgency_str)
+            except ValueError:
+                urgency = AlertUrgency.UNKNOWN
+
+            all_alerts.append(
+                WFOAlert(
+                    id=alert_id.split("/")[-1] if "/" in alert_id else alert_id,
+                    wfo=wfo,
+                    event=props.get("event", "Unknown"),
+                    headline=props.get("headline"),
+                    description=props.get("description"),
+                    instruction=props.get("instruction"),
+                    severity=severity,
+                    urgency=urgency,
+                    effective=self._parse_datetime(props.get("effective")),
+                    expires=self._parse_datetime(props.get("expires")),
+                    area_desc=props.get("areaDesc"),
+                )
+            )
+
+            # Apply limit
+            if len(all_alerts) >= limit:
+                break
+
+        return all_alerts
 
     async def get_active_alerts(self, zones: list[str]) -> list[WFOAlert]:
         """Fetch active alerts for specified forecast zones.
