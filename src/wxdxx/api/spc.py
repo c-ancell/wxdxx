@@ -35,6 +35,7 @@ class SPCClient:
     """Client for fetching products from the Storm Prediction Center."""
 
     BASE_URL = "https://www.spc.noaa.gov"
+    MAX_CONCURRENT_REQUESTS = 3  # Limit concurrent requests to be a good citizen
 
     def __init__(self) -> None:
         self._client = httpx.AsyncClient(
@@ -44,6 +45,12 @@ class SPCClient:
                 "User-Agent": "WxDXX/0.1.1 (https://github.com/c-ancell/wxdxx, wxdxxapp@gmail.com)"
             },
         )
+        self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_REQUESTS)
+
+    async def _get(self, url: str) -> httpx.Response:
+        """Make a rate-limited GET request."""
+        async with self._semaphore:
+            return await self._client.get(url)
 
     async def close(self) -> None:
         """Close the HTTP client."""
@@ -60,7 +67,7 @@ class SPCClient:
         day_num = day.value.replace("day", "")
         url = f"/products/outlook/day{day_num}otlk.html"
 
-        response = await self._client.get(url)
+        response = await self._get(url)
         response.raise_for_status()
 
         text = self._extract_outlook_text(response.text)
@@ -85,7 +92,7 @@ class SPCClient:
     async def get_active_mds(self) -> list[MesoscaleDiscussion]:
         """Fetch list of active mesoscale discussions."""
         url = "/products/md/"
-        response = await self._client.get(url)
+        response = await self._get(url)
         response.raise_for_status()
 
         md_numbers = self._parse_md_list(response.text)[:10]  # Limit to most recent 10
@@ -105,7 +112,7 @@ class SPCClient:
     async def get_md(self, number: int) -> MesoscaleDiscussion:
         """Fetch a specific mesoscale discussion by number."""
         url = f"/products/md/md{number:04d}.html"
-        response = await self._client.get(url)
+        response = await self._get(url)
         response.raise_for_status()
 
         text = self._extract_md_text(response.text)
@@ -128,7 +135,7 @@ class SPCClient:
     async def get_active_watches(self) -> list[Watch]:
         """Fetch list of active watches."""
         url = "/products/watch/"
-        response = await self._client.get(url)
+        response = await self._get(url)
         response.raise_for_status()
 
         watch_info = self._parse_watch_list(response.text)[:10]  # Limit to most recent 10
@@ -151,7 +158,7 @@ class SPCClient:
         """Fetch a specific watch by number."""
         prefix = "ww" if watch_type == WatchType.TORNADO else "ww"
         url = f"/products/watch/{prefix}{number:04d}.html"
-        response = await self._client.get(url)
+        response = await self._get(url)
         response.raise_for_status()
 
         text = self._extract_watch_text(response.text)

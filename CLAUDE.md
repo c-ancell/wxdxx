@@ -151,7 +151,7 @@ Findings from spike research on SPC/NWS API best practices. SPC robots.txt has 1
 
 3. **Conditional requests (ETag/If-Modified-Since)** (Medium effort, High impact): Both SPC and NWS support HTTP caching headers. Store ETag/Last-Modified with cached data, send If-None-Match/If-Modified-Since on requests. Reduces bandwidth 80%+ for unchanged content. Especially valuable for outlooks and zones.
 
-4. **Request rate limiting** (Low effort, Medium impact): Add async semaphore to limit concurrent requests per host (SPC: 2-3, NWS: 5-10). Important before adding METAR support or empty MD/watch polling which increase request frequency.
+4. ~~**Request rate limiting**~~: ✅ Done - Added async semaphores to limit concurrent requests (SPC: 3, NWS: 8). See `_get()` wrapper methods in api/spc.py and api/nws.py.
 
 5. **Smart cache invalidation** (Medium effort, High impact): Current TTL-based caching doesn't support nuanced needs of planned features. Implement per-product staleness tracking, targeted refresh without full cache clear, and content availability monitoring (empty → populated transition). Enables empty MD/watch feature cleanly.
 

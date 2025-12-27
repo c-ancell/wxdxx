@@ -14,6 +14,7 @@ class NWSClient:
     """Client for fetching products from the NWS API."""
 
     BASE_URL = "https://api.weather.gov"
+    MAX_CONCURRENT_REQUESTS = 8  # NWS API is generous but we still limit
 
     def __init__(self) -> None:
         self._client = httpx.AsyncClient(
@@ -24,8 +25,14 @@ class NWSClient:
                 "Accept": "application/geo+json",
             },
         )
+        self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_REQUESTS)
         # Cache zone ID -> WFO ID mappings (zones rarely change)
         self._zone_wfo_cache: dict[str, str] = {}
+
+    async def _get(self, url: str, **kwargs) -> httpx.Response:
+        """Make a rate-limited GET request."""
+        async with self._semaphore:
+            return await self._client.get(url, **kwargs)
 
     async def close(self) -> None:
         """Close the HTTP client."""
@@ -40,7 +47,7 @@ class NWSClient:
     async def validate_wfo(self, wfo_id: str) -> bool:
         """Check if a WFO ID is valid."""
         try:
-            response = await self._client.get(f"/offices/{wfo_id.upper()}")
+            response = await self._get(f"/offices/{wfo_id.upper()}")
             return response.status_code == 200
         except httpx.HTTPError:
             return False
@@ -59,7 +66,7 @@ class NWSClient:
             return self._zone_wfo_cache[zone_id]
 
         try:
-            response = await self._client.get(f"/zones/forecast/{zone_id}")
+            response = await self._get(f"/zones/forecast/{zone_id}")
             if response.status_code != 200:
                 return ""
             data = response.json()
@@ -80,7 +87,7 @@ class NWSClient:
         Returns:
             List of zone IDs (e.g., ["OKZ025", "OKZ026", ...])
         """
-        response = await self._client.get(f"/offices/{wfo_id.upper()}")
+        response = await self._get(f"/offices/{wfo_id.upper()}")
         response.raise_for_status()
         data = response.json()
 
@@ -97,7 +104,7 @@ class NWSClient:
         self, wfo_id: str, product_type: str, limit: int = 5
     ) -> list[WFOProduct]:
         """Fetch products of a specific type from a WFO."""
-        response = await self._client.get(
+        response = await self._get(
             "/products",
             params={
                 "type": product_type.upper(),
@@ -143,7 +150,7 @@ class NWSClient:
 
     async def get_product(self, product_id: str) -> WFOProduct:
         """Fetch a specific product by ID."""
-        response = await self._client.get(f"/products/{product_id}")
+        response = await self._get(f"/products/{product_id}")
         response.raise_for_status()
         data = response.json()
 
@@ -199,7 +206,7 @@ class NWSClient:
 
         # NWS API /alerts/active doesn't accept limit/status/message_type params
         # Fetch all and filter in Python
-        response = await self._client.get("/alerts/active")
+        response = await self._get("/alerts/active")
         response.raise_for_status()
         data = response.json()
 
@@ -319,7 +326,7 @@ class NWSClient:
             zone_param = ",".join(zone_chunk)
 
             # Don't filter by message_type - "update" messages are valid active alerts
-            response = await self._client.get(
+            response = await self._get(
                 "/alerts/active",
                 params={"zone": zone_param},
             )
