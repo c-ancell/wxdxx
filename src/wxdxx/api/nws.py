@@ -226,6 +226,28 @@ class NWSClient:
 
         return results
 
+    async def get_wfo_zones_geometry(self, wfo_id: str) -> dict[str, ZoneGeometry]:
+        """Get geometry for all forecast zones in a WFO's area.
+
+        This method is optimized for performance:
+        - Zone IDs are fetched once and cached
+        - Zone geometries use the shared geometry cache
+        - Subsequent calls for the same WFO are instant
+
+        Args:
+            wfo_id: WFO ID (e.g., "OUN", "FWD")
+
+        Returns:
+            Dict mapping zone_id to ZoneGeometry for all WFO zones.
+        """
+        # Get zone IDs for the WFO (uses office endpoint)
+        zone_ids = await self.get_wfo_zones(wfo_id)
+        if not zone_ids:
+            return {}
+
+        # Batch fetch all zone geometries (uses cache)
+        return await self.get_zones_geometry(zone_ids)
+
     async def get_wfo_zones(self, wfo_id: str) -> list[str]:
         """Fetch responsible forecast zones for a WFO.
 

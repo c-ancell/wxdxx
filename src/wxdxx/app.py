@@ -233,8 +233,9 @@ class WxDXX(App):
         self._fast_poll_tasks: dict[str, asyncio.Task] = {}
         # Map visibility state
         self._map_visible: bool = False
-        # Current alert's affected zones (for map display)
+        # Current alert's affected zones and WFO (for map display)
         self._current_alert_zones: list[str] = []
+        self._current_alert_wfo: str = ""
 
     def _set_product_timing(
         self,
@@ -879,7 +880,12 @@ class WxDXX(App):
             zone_map.add_class("hidden")
 
     async def _render_zone_map(self) -> None:
-        """Fetch zone geometry and render the map."""
+        """Fetch zone geometry and render the map with context.
+
+        Renders all zones for the alert's WFO as context (gray outlines),
+        then highlights the affected zones in red. Uses caching for
+        performance - subsequent views of alerts from the same WFO are instant.
+        """
         if not self._current_alert_zones:
             return
 
@@ -887,25 +893,58 @@ class WxDXX(App):
         zone_map.clear()
         zone_map.set_title("Loading zone geometry...")
 
-        # Fetch geometry for all zones
-        geometries = await self.nws_client.get_zones_geometry(self._current_alert_zones)
+        # Fetch context zones (all zones for this WFO) and affected zones in parallel
+        # Context zones are cached after first fetch, so subsequent calls are fast
+        wfo = self._current_alert_wfo
+        affected_set = set(self._current_alert_zones)
 
-        if not geometries:
+        if wfo:
+            # Fetch all WFO zones for context (uses cache)
+            try:
+                context_geometries = await self.nws_client.get_wfo_zones_geometry(wfo)
+            except Exception:
+                # WFO fetch failed - fall back to just affected zones
+                context_geometries = {}
+
+        if not wfo or not context_geometries:
+            # No WFO or WFO fetch failed - just fetch affected zones
+            context_geometries = await self.nws_client.get_zones_geometry(
+                self._current_alert_zones
+            )
+
+        if not context_geometries:
             zone_map.set_title("No geometry available")
             return
 
-        # Color map for different alert types
         zone_map.clear()
 
-        # Add each zone polygon
-        for zone_id, zone_geo in geometries.items():
-            for polygon in zone_geo.polygons:
-                zone_map.add_polygon(polygon, color="bright_red")
+        # First pass: render context zones (non-affected) as gray outlines
+        for zone_id, zone_geo in context_geometries.items():
+            if zone_id not in affected_set:
+                for polygon in zone_geo.polygons:
+                    zone_map.add_polygon(polygon, color="bright_black", outline_only=True)
 
-        # Set title with zone count
-        zone_count = len(geometries)
-        zone_map.set_title(f"Affected Zones ({zone_count})")
-        zone_map.render_map()
+        # Second pass: render affected zones as filled red (on top of outlines)
+        affected_count = 0
+        for zone_id in self._current_alert_zones:
+            if zone_id in context_geometries:
+                zone_geo = context_geometries[zone_id]
+                for polygon in zone_geo.polygons:
+                    zone_map.add_polygon(polygon, color="bright_red", outline_only=False)
+                affected_count += 1
+
+        # Set title with counts
+        context_count = len(context_geometries) - affected_count
+        if wfo and context_count > 0:
+            zone_map.set_title(
+                f"Alert: {affected_count} zone{'s' if affected_count != 1 else ''} "
+                f"(WFO {wfo}: {context_count} context)"
+            )
+        else:
+            zone_map.set_title(f"Affected Zones ({affected_count})")
+
+        # Render in a thread to avoid blocking the event loop
+        await asyncio.to_thread(zone_map.render_map)
 
     def action_add_wfo(self) -> None:
         """Show dialog to add a WFO."""
@@ -1086,6 +1125,7 @@ class WxDXX(App):
 
         # Clear previous zones
         self._current_alert_zones = []
+        self._current_alert_wfo = ""
 
         # Try to find in cache
         cached_alerts = self._cache.get_wfo_alerts(wfo_id)
@@ -1095,8 +1135,11 @@ class WxDXX(App):
                     self._set_product_timing(issued=alert.effective, expires=alert.expires)
                     product_view.show_product(alert.title, alert.text)
 
-                    # Store affected zones for map display
+                    # Store affected zones and WFO for map display
+                    # Use the tracked WFO ID (wfo_id) since alert.wfo can be
+                    # unreliable (e.g., "DEN" instead of "BOU" for Denver area)
                     self._current_alert_zones = alert.affected_zones
+                    self._current_alert_wfo = wfo_id
 
                     # If map is visible, render the zones
                     if self._map_visible and self._current_alert_zones:
@@ -1110,6 +1153,7 @@ class WxDXX(App):
         # Not found in cache - show error (alerts should always be in cache)
         self._set_product_timing()
         self._current_alert_zones = []
+        self._current_alert_wfo = ""
         product_view.show_error("Alert no longer available. Try refreshing.")
 
 

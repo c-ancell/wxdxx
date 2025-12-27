@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-12-27
+
+### Added
+
+- Zone maps for NWS alerts: Press 'm' when viewing an alert to see a Braille-rendered map of affected zones
+- Context zones: Map displays all WFO zones as gray outlines with affected zones highlighted in red
+- Zone geometry API: Fetch and cache GeoJSON polygon data from NWS zone endpoints
+
+### Fixed
+
+- WFO extraction from alerts now uses tracked WFO ID (fixes "DEN" vs "BOU" mismatch)
+- Map rendering no longer freezes news ticker (bounding box optimization + thread-based rendering)
+
 ## [0.3.0] - 2025-12-27
 
 ### Added

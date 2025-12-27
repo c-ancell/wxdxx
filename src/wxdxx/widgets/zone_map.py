@@ -98,11 +98,30 @@ class BrailleCanvas:
             color: Rich color name for the polygon
         """
         min_lon, min_lat, max_lon, max_lat = bounds
-        scale_x = (max_lon - min_lon) / self.pixel_width
-        scale_y = (max_lat - min_lat) / self.pixel_height
+        lon_range = max_lon - min_lon
+        lat_range = max_lat - min_lat
 
-        for py in range(self.pixel_height):
-            for px in range(self.pixel_width):
+        if lon_range == 0 or lat_range == 0:
+            return
+
+        scale_x = lon_range / self.pixel_width
+        scale_y = lat_range / self.pixel_height
+
+        # Calculate polygon bounding box in pixel coordinates for optimization
+        poly_lons = [c[0] for c in coords]
+        poly_lats = [c[1] for c in coords]
+        poly_min_lon, poly_max_lon = min(poly_lons), max(poly_lons)
+        poly_min_lat, poly_max_lat = min(poly_lats), max(poly_lats)
+
+        # Convert to pixel bounds (with 1px padding for rounding)
+        px_min = max(0, int((poly_min_lon - min_lon) / scale_x) - 1)
+        px_max = min(self.pixel_width, int((poly_max_lon - min_lon) / scale_x) + 2)
+        py_min = max(0, int((max_lat - poly_max_lat) / scale_y) - 1)
+        py_max = min(self.pixel_height, int((max_lat - poly_min_lat) / scale_y) + 2)
+
+        # Only test pixels within polygon's bounding box
+        for py in range(py_min, py_max):
+            for px in range(px_min, px_max):
                 lon = min_lon + px * scale_x
                 lat = max_lat - py * scale_y  # Y inverted for screen coords
                 if self._point_in_polygon(lon, lat, coords):
@@ -246,7 +265,8 @@ class ZoneMap(Static):
     ) -> None:
         super().__init__(name=name, id=id, classes=classes)
         self._canvas = BrailleCanvas(width=width, height=height)
-        self._polygons: list[tuple[list[tuple[float, float]], str]] = []
+        # Polygons: (coords, color, outline_only)
+        self._polygons: list[tuple[list[tuple[float, float]], str, bool]] = []
         self._bounds: tuple[float, float, float, float] | None = None
         self._title: str = ""
 
@@ -266,14 +286,16 @@ class ZoneMap(Static):
         self,
         coordinates: list[tuple[float, float]],
         color: str = "bright_white",
+        outline_only: bool = False,
     ) -> None:
         """Add a polygon to the map.
 
         Args:
             coordinates: List of (lon, lat) coordinate pairs
-            color: Rich color name for the polygon fill
+            color: Rich color name for the polygon
+            outline_only: If True, only draw outline (no fill)
         """
-        self._polygons.append((coordinates, color))
+        self._polygons.append((coordinates, color, outline_only))
 
     def render_map(self) -> None:
         """Render all polygons to the map."""
@@ -291,9 +313,16 @@ class ZoneMap(Static):
         if self._bounds is None:
             self._bounds = calculate_bounds([p[0] for p in self._polygons])
 
-        # Draw all polygons
-        for coords, color in self._polygons:
-            self._canvas.draw_polygon(coords, self._bounds, color)
+        # Draw all polygons (outlines first, then fills, so fills are on top)
+        # First pass: outlines only
+        for coords, color, outline_only in self._polygons:
+            if outline_only:
+                self._canvas.draw_polygon_outline(coords, self._bounds, color)
+
+        # Second pass: filled polygons
+        for coords, color, outline_only in self._polygons:
+            if not outline_only:
+                self._canvas.draw_polygon(coords, self._bounds, color)
 
         # Build output
         text = Text()
