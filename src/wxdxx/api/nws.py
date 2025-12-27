@@ -195,6 +195,7 @@ class NWSClient:
         seen_ids: set[str] = set()
         # For ticker, dedupe by WFO+event to avoid repetitive headlines
         seen_wfo_events: set[str] = set()
+        now = datetime.now(timezone.utc)
 
         # NWS API /alerts/active doesn't accept limit/status/message_type params
         # Fetch all and filter in Python
@@ -209,6 +210,11 @@ class NWSClient:
 
             # Filter to ticker-worthy events only
             if event not in ticker_events:
+                continue
+
+            # Skip expired alerts early (before deduplication)
+            expires = self._parse_datetime(props.get("expires"))
+            if expires and expires < now:
                 continue
 
             # Deduplicate by alert ID
@@ -259,7 +265,7 @@ class NWSClient:
                     severity=severity,
                     urgency=urgency,
                     effective=self._parse_datetime(props.get("effective")),
-                    expires=self._parse_datetime(props.get("expires")),
+                    expires=expires,  # Already parsed above
                     area_desc=props.get("areaDesc"),
                 )
             )
@@ -291,9 +297,10 @@ class NWSClient:
             zone_chunk = zones[i : i + 50]
             zone_param = ",".join(zone_chunk)
 
+            # Don't filter by message_type - "update" messages are valid active alerts
             response = await self._client.get(
                 "/alerts/active",
-                params={"zone": zone_param, "message_type": "alert"},
+                params={"zone": zone_param},
             )
             response.raise_for_status()
             data = response.json()

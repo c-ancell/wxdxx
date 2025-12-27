@@ -438,10 +438,11 @@ class WxDXX(App):
                 if alert.expires and alert.expires < now:
                     continue
 
-                # Format expiry time in UTC
+                # Format expiry time in UTC (convert from original timezone)
                 expires_str = ""
                 if alert.expires:
-                    expires_str = alert.expires.strftime("%d/%H%MZ")
+                    expires_utc = alert.expires.astimezone(timezone.utc)
+                    expires_str = expires_utc.strftime("%d/%H%MZ")
 
                 # Build headline text
                 wfo = alert.wfo or "NWS"
@@ -468,10 +469,11 @@ class WxDXX(App):
                 if watch.expires and watch.expires < now:
                     continue
 
-                # Format expiry time in UTC
+                # Format expiry time in UTC (convert from original timezone)
                 expires_str = ""
                 if watch.expires:
-                    expires_str = watch.expires.strftime("%d/%H%MZ")
+                    expires_utc = watch.expires.astimezone(timezone.utc)
+                    expires_str = expires_utc.strftime("%d/%H%MZ")
 
                 # Determine event type for coloring
                 event_type = "TOR" if watch.watch_type.value == "tornado" else "SVR"

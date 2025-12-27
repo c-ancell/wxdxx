@@ -81,6 +81,9 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - Always deduplicate when parsing HTML link lists with `re.findall()` - pages often have multiple links to the same product (header, table, sidebar, etc.). Use `set()` before returning.
 - The `_is_refreshing` flag now guards against concurrent refreshes - check it at the start of `_refresh_all_data_with_indicator()`
 - UGC expiry parsing: Don't assume future month rollover when expiry day < current day - the product may just be expired. Only roll back to previous month when current day is 1-2 and expiry day is 28-31.
+- NWS API `message_type=alert` filter: Don't use this when querying `/alerts/active` - it excludes "Update" messages, which is what most active alerts have (re-issued alerts). This caused WFO sidebar alerts to be empty while ticker showed alerts.
+- UTC display with "Z" suffix: Always convert to UTC with `.astimezone(timezone.utc)` before formatting. Just appending "Z" to `strftime()` output shows the datetime's original timezone, not UTC - e.g., midnight PST displays as "0000Z" but is actually 0800 UTC.
+- Expiry filtering for cached data: Filter at multiple points (API fetch, headline building, periodic timer, display) since cached data can become stale between refreshes.
 
 ## Current Features
 - Convective Outlooks (Day 1-3) fetched from SPC
@@ -107,12 +110,12 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 - WFO Active Alerts: Hazard alerts (warnings, watches, advisories) fetched by forecast zone and displayed alongside text products with NWS color coding and expiry countdowns
 - SPS Expiry Filtering: Special Weather Statements parsed for UGC header expiry times; expired SPS products automatically filtered from sidebar with countdown display
 - Unread indicators: New/updated products show a filled circle (●) in sidebar; circle disappears when product is viewed. Dark circle for highlighted items, light circle for regular items.
-- News Ticker: Scrolling bar below header showing nationwide NWS warnings and SPC watches. Headlines colored by event type (TOR=red, SVR=yellow, etc.). New alerts show with background color for first 2 scroll cycles, then text color only. Headlines sorted by severity (TOR > SVR > FFW > watches).
+- News Ticker: Scrolling bar below header showing nationwide NWS warnings and SPC watches. Headlines colored by event type (TOR=red, SVR=yellow, etc.). New alerts show with background color for first 2 scroll cycles, then text color only. Headlines sorted by severity (TOR > SVR > FFW > watches). Expired alerts are automatically filtered out on each scroll cycle.
 
 ## TODO / Not Yet Implemented
 
 ### Larger effort
-- News ticker: Filter out expired alerts - currently showing alerts past their expiry time
+- Add a "Mark All as Read" hotkey for the sidebar unread products
 - Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 - Add "R" (SHIFT+r) for hard refresh: Currently 'r' clears all caches and refreshes. Consider making 'r' a soft refresh (use cached data if valid) and 'R' a hard refresh (clear all caches first). This would make auto-refresh and 'r' behave the same way.

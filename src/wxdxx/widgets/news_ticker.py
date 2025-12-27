@@ -80,6 +80,7 @@ class NewsTicker(Widget):
     # Configuration
     SCROLL_SPEED = 1  # Characters per update interval
     UPDATE_INTERVAL = 0.12  # Seconds between scroll updates (~8 chars/sec)
+    EXPIRY_CHECK_INTERVAL = 30.0  # Seconds between expiry checks
     SEPARATOR = " *** "
     NEW_THRESHOLD_APPEARANCES = 2  # Show "NEW" styling for this many full scrolls
 
@@ -98,8 +99,9 @@ class NewsTicker(Widget):
         self._paused: bool = False
 
     def on_mount(self) -> None:
-        """Start the scroll animation timer."""
+        """Start the scroll animation timer and expiry check timer."""
         self.set_interval(self.UPDATE_INTERVAL, self._scroll_tick)
+        self.set_interval(self.EXPIRY_CHECK_INTERVAL, self._expiry_check_tick)
 
     def _scroll_tick(self) -> None:
         """Advance the scroll position and update display."""
@@ -112,8 +114,26 @@ class NewsTicker(Widget):
         if self._scroll_offset >= len(self._plain_text):
             self._scroll_offset = self._scroll_offset % len(self._plain_text)
             self._increment_appearance_counts()
+            # Filter out expired headlines and rebuild text if any were removed
+            if self._filter_expired_headlines():
+                self._rebuild_plain_text()
+                # Reset scroll offset if text got shorter
+                if self._plain_text and self._scroll_offset >= len(self._plain_text):
+                    self._scroll_offset = 0
 
         self.refresh()
+
+    def _expiry_check_tick(self) -> None:
+        """Periodically check for and remove expired headlines."""
+        if not self._headlines:
+            return
+
+        if self._filter_expired_headlines():
+            self._rebuild_plain_text()
+            # Reset scroll offset if text got shorter
+            if self._plain_text and self._scroll_offset >= len(self._plain_text):
+                self._scroll_offset = 0
+            self.refresh()
 
     def _increment_appearance_counts(self) -> None:
         """Increment appearance count for all headlines after a full scroll cycle."""
@@ -123,12 +143,42 @@ class NewsTicker(Widget):
             if headline.appearance_count >= self.NEW_THRESHOLD_APPEARANCES:
                 headline.is_new = False
 
+    def _filter_expired_headlines(self) -> bool:
+        """Remove expired headlines from the list.
+
+        Returns:
+            True if any headlines were removed, False otherwise.
+        """
+        now = datetime.now(timezone.utc)
+        original_count = len(self._headlines)
+
+        # Find expired IDs before filtering
+        expired_ids = {
+            h.id
+            for h in self._headlines
+            if h.expires is not None and h.expires <= now
+        }
+
+        # Filter out expired headlines
+        self._headlines = [
+            h for h in self._headlines if h.expires is None or h.expires > now
+        ]
+
+        # Remove expired IDs from known set so they can reappear if re-issued
+        self._known_ids -= expired_ids
+
+        return len(self._headlines) < original_count
+
     def update_headlines(self, headlines: list[TickerHeadline]) -> None:
         """Update the ticker with new headline data.
 
         Args:
             headlines: List of TickerHeadline objects to display
         """
+        # Filter out any expired headlines
+        now = datetime.now(timezone.utc)
+        headlines = [h for h in headlines if h.expires is None or h.expires > now]
+
         new_ids = {h.id for h in headlines}
 
         # Identify truly new headlines (never seen before)
@@ -168,6 +218,12 @@ class NewsTicker(Widget):
 
     def _rebuild_plain_text(self) -> None:
         """Rebuild the plain text string from headlines."""
+        # Filter expired headlines before rebuilding
+        now = datetime.now(timezone.utc)
+        self._headlines = [
+            h for h in self._headlines if h.expires is None or h.expires > now
+        ]
+
         if not self._headlines:
             self._plain_text = ""
             return
