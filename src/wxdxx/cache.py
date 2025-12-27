@@ -372,6 +372,18 @@ class ProductCache:
         self._cleanup_expired()
         return [k for k, e in self._cache.items() if e.is_empty]
 
+    def is_empty(self, key: str) -> bool:
+        """Check if a cached product has empty content.
+
+        Args:
+            key: Cache key to check
+
+        Returns:
+            True if entry exists and has empty content, False otherwise
+        """
+        entry = self._cache.get(key)
+        return entry is not None and entry.is_empty
+
     def mark_populated(self, key: str, content_text: str) -> bool:
         """Mark a previously empty product as now populated.
 

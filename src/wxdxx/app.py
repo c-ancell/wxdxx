@@ -211,6 +211,8 @@ class WxDXX(App):
         self._last_refresh_time: datetime | None = None
         # Track which sidebar items have been read (viewed in content pane)
         self._read_items: set[str] = set()
+        # Fast-poll tasks for empty MDs/watches (cache_key -> asyncio.Task)
+        self._fast_poll_tasks: dict[str, asyncio.Task] = {}
 
     def _set_product_timing(
         self,
@@ -396,6 +398,79 @@ class WxDXX(App):
                 sidebar.update_outlook_risk(
                     day_num, outlook.max_risk.value if outlook.max_risk else None
                 )
+
+        # Start fast-polling for any empty MDs/watches
+        self._start_fast_poll_for_empty_products()
+
+    def _start_fast_poll_for_empty_products(self) -> None:
+        """Start fast-polling tasks for any empty MDs/watches.
+
+        Checks the cache for products with minimal content and starts
+        background polling tasks to fetch content as soon as it's available.
+        """
+        empty_keys = self._cache.get_empty_products()
+
+        for key in empty_keys:
+            # Only fast-poll SPC MDs and watches
+            if not key.startswith("spc:md:") and not key.startswith("spc:watch:"):
+                continue
+
+            # Don't start duplicate tasks
+            if key in self._fast_poll_tasks:
+                continue
+
+            # Start fast-poll task
+            task = asyncio.create_task(self._fast_poll_product(key))
+            self._fast_poll_tasks[key] = task
+
+    async def _fast_poll_product(self, cache_key: str) -> None:
+        """Fast-poll an empty product until content appears or timeout.
+
+        Args:
+            cache_key: Cache key in format "spc:{md|watch}:{number}"
+        """
+        POLL_INTERVAL = 15  # seconds
+        MAX_DURATION = 300  # 5 minutes
+
+        start_time = time.time()
+        parts = cache_key.split(":")
+        if len(parts) != 3:
+            return
+
+        source, category, identifier = parts
+
+        try:
+            while time.time() - start_time < MAX_DURATION:
+                await asyncio.sleep(POLL_INTERVAL)
+
+                # Check if task was cancelled or key removed
+                if cache_key not in self._fast_poll_tasks:
+                    return
+
+                # Fetch fresh content
+                if category == "md":
+                    md = await self.spc_client.get_md(int(identifier))
+                    if md:
+                        self._cache.set_md(int(identifier), md, content_text=md.text)
+                        if not self._cache.is_empty(cache_key):
+                            # Content appeared - trigger sidebar refresh
+                            await self._refresh_sidebar_data()
+                            return
+                elif category == "watch":
+                    watch = await self.spc_client.get_watch(int(identifier))
+                    if watch:
+                        self._cache.set_watch(
+                            int(identifier), watch, content_text=watch.text
+                        )
+                        if not self._cache.is_empty(cache_key):
+                            # Content appeared - trigger sidebar refresh
+                            await self._refresh_sidebar_data()
+                            return
+        except asyncio.CancelledError:
+            pass  # Task was cancelled, clean exit
+        finally:
+            # Cleanup task reference
+            self._fast_poll_tasks.pop(cache_key, None)
 
     async def _refresh_ticker_data(self) -> None:
         """Refresh the news ticker with nationwide alerts and SPC watches."""
@@ -672,6 +747,11 @@ class WxDXX(App):
 
     def action_refresh(self) -> None:
         """Force refresh - clear all caches and fetch fresh data."""
+        # Cancel any fast-poll tasks (they'll be restarted if needed after refresh)
+        for task in self._fast_poll_tasks.values():
+            task.cancel()
+        self._fast_poll_tasks.clear()
+
         # Clear all SPC data
         self._cache.invalidate_by_source("spc")
         # Clear NWS data except zones (zones have 24hr TTL and rarely change)
