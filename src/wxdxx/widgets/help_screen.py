@@ -28,6 +28,7 @@ HELP_TEXT = f"""\
   1          View Day 1 Outlook
   2          View Day 2 Outlook
   3          View Day 3 Outlook
+  m          Toggle zone map (when viewing alerts)
 
 [bold]WFO Products[/bold]
   w          Add a WFO to track

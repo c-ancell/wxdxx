@@ -104,6 +104,23 @@ class NWSClient:
 
         return ""
 
+    def _extract_zone_ids(self, zone_urls: list[str]) -> list[str]:
+        """Extract zone IDs from NWS zone URLs.
+
+        Args:
+            zone_urls: List of zone URLs (e.g., ["https://api.weather.gov/zones/forecast/OKZ025"])
+
+        Returns:
+            List of zone IDs (e.g., ["OKZ025"])
+        """
+        zone_ids = []
+        for url in zone_urls:
+            if "/" in url:
+                zone_id = url.split("/")[-1]
+                if zone_id:
+                    zone_ids.append(zone_id)
+        return zone_ids
+
     async def get_zone_geometry(self, zone_id: str) -> ZoneGeometry | None:
         """Get the geometry for a forecast zone.
 
@@ -339,7 +356,7 @@ class NWSClient:
         data = response.json()
 
         # First pass: collect candidate alerts and their zone IDs (no WFO lookups yet)
-        candidates: list[tuple[dict, str]] = []  # (props, zone_id)
+        candidates: list[tuple[dict, str, list[str]]] = []  # (props, first_zone_id, all_zone_ids)
         for feature in data.get("features", []):
             props = feature.get("properties", {})
             alert_id = props.get("id", "")
@@ -359,18 +376,15 @@ class NWSClient:
                 continue
             seen_ids.add(alert_id)
 
-            # Extract zone ID from the first affected zone
-            affected_zones = props.get("affectedZones", [])
-            zone_id = ""
-            if affected_zones:
-                # Zone URL format: https://api.weather.gov/zones/forecast/NVZ019
-                first_zone_url = affected_zones[0]
-                zone_id = first_zone_url.split("/")[-1] if "/" in first_zone_url else ""
+            # Extract all zone IDs from affected zones
+            affected_zone_urls = props.get("affectedZones", [])
+            zone_ids = self._extract_zone_ids(affected_zone_urls)
+            first_zone_id = zone_ids[0] if zone_ids else ""
 
-            candidates.append((props, zone_id))
+            candidates.append((props, first_zone_id, zone_ids))
 
         # Batch lookup all WFOs in parallel
-        unique_zones = list({zone_id for _, zone_id in candidates if zone_id})
+        unique_zones = list({first_zone for _, first_zone, _ in candidates if first_zone})
         if unique_zones:
             wfo_results = await asyncio.gather(
                 *[self.get_zone_wfo(zone_id) for zone_id in unique_zones]
@@ -383,8 +397,8 @@ class NWSClient:
         all_alerts: list[WFOAlert] = []
         seen_wfo_events: set[str] = set()
 
-        for props, zone_id in candidates:
-            wfo = zone_to_wfo.get(zone_id, "") if zone_id else ""
+        for props, first_zone_id, zone_ids in candidates:
+            wfo = zone_to_wfo.get(first_zone_id, "") if first_zone_id else ""
             event = props.get("event", "")
 
             # Create WFO+event key for deduplication
@@ -423,6 +437,7 @@ class NWSClient:
                     effective=self._parse_datetime(props.get("effective")),
                     expires=self._parse_datetime(props.get("expires")),
                     area_desc=props.get("areaDesc"),
+                    affected_zones=zone_ids,
                 )
             )
 
@@ -499,6 +514,10 @@ class NWSClient:
                 except ValueError:
                     urgency = AlertUrgency.UNKNOWN
 
+                # Extract all zone IDs from affected zones
+                affected_zone_urls = props.get("affectedZones", [])
+                zone_ids = self._extract_zone_ids(affected_zone_urls)
+
                 all_alerts.append(
                     WFOAlert(
                         id=alert_id.split("/")[-1] if "/" in alert_id else alert_id,
@@ -512,6 +531,7 @@ class NWSClient:
                         effective=self._parse_datetime(props.get("effective")),
                         expires=self._parse_datetime(props.get("expires")),
                         area_desc=props.get("areaDesc"),
+                        affected_zones=zone_ids,
                     )
                 )
 

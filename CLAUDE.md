@@ -256,10 +256,18 @@ Display geographic context for warnings, watches, MDs, and WFO coverage areas us
 - Tested with real NWS zone geometry (67-615 points/zone)
 - Render time: ~50ms for 6 zones at 70x22 chars
 
-**Remaining for integration:**
-- Wire up to alert/MD/watch display (show map when viewing product)
-- Fetch zone geometry when loading alerts (extend NWS API client)
-- Add map toggle keybind (e.g., 'm' to show/hide map panel)
+**Integration complete (2025-12-27):**
+- ✅ `ZoneGeometry` model and `get_zone_geometry()`/`get_zones_geometry()` in NWS client
+- ✅ `affected_zones` field added to `WFOAlert` model
+- ✅ Zone IDs extracted from alerts during fetch
+- ✅ `ZoneMap` widget added to app layout (below ProductView)
+- ✅ 'm' keybind toggles map visibility
+- ✅ Map renders when viewing alerts with affected zones
+
+**Future enhancements:**
+- Add map support for MDs and Watches (need to extract geometry from SPC data)
+- Color zones by alert severity (currently all zones rendered in red)
+- Add zone labels or legend
 
 ### Spikes (Research/Discussion)
 (None currently - see Epic sections above for spike items)

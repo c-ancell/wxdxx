@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Header, Static
 
 from .api.nws import NWSClient
@@ -25,6 +25,7 @@ from .widgets.product_view import ProductView
 from .widgets.settings_screen import SettingsResult, SettingsScreen
 from .widgets.sidebar import Sidebar
 from .widgets.wfo_input import WFODialogMode, WFOInputDialog
+from .widgets.zone_map import ZoneMap
 
 
 def format_timedelta(td_seconds: float) -> str:
@@ -170,6 +171,22 @@ class WxDXX(App):
         padding: 0 1;
         color: $text-muted;
     }
+
+    #content-area {
+        height: 1fr;
+    }
+
+    ZoneMap {
+        height: auto;
+        max-height: 30;
+        border-top: solid $primary;
+        padding: 1;
+        background: $surface;
+    }
+
+    ZoneMap.hidden {
+        display: none;
+    }
     """
 
     BINDINGS = [
@@ -184,6 +201,7 @@ class WxDXX(App):
         Binding("2", "view_day2", "Day 2", show=False),
         Binding("3", "view_day3", "Day 3", show=False),
         Binding("M", "mark_all_read", "Mark All Read", show=False),
+        Binding("m", "toggle_map", "Toggle Map", show=False),
     ]
 
     AUTO_REFRESH_INTERVAL = 60  # seconds
@@ -213,6 +231,10 @@ class WxDXX(App):
         self._read_items: set[str] = set()
         # Fast-poll tasks for empty MDs/watches (cache_key -> asyncio.Task)
         self._fast_poll_tasks: dict[str, asyncio.Task] = {}
+        # Map visibility state
+        self._map_visible: bool = False
+        # Current alert's affected zones (for map display)
+        self._current_alert_zones: list[str] = []
 
     def _set_product_timing(
         self,
@@ -235,7 +257,11 @@ class WxDXX(App):
         yield NewsTicker(id="news-ticker", update_interval=ticker_interval)
         yield Horizontal(
             Sidebar(),
-            ProductView(),
+            Vertical(
+                ProductView(),
+                ZoneMap(id="zone-map", classes="hidden"),
+                id="content-area",
+            ),
             id="main-container",
         )
         yield Horizontal(Footer(), ClockWidget(), id="status-bar")
@@ -836,6 +862,51 @@ class WxDXX(App):
         if count > 0:
             self.notify(f"Marked {count} item{'s' if count != 1 else ''} as read")
 
+    def action_toggle_map(self) -> None:
+        """Toggle the zone map visibility."""
+        zone_map = self.query_one("#zone-map", ZoneMap)
+        self._map_visible = not self._map_visible
+
+        if self._map_visible:
+            zone_map.remove_class("hidden")
+            # If we have zones to display, render them
+            if self._current_alert_zones:
+                self.run_worker(self._render_zone_map())
+            else:
+                zone_map.clear()
+                zone_map.set_title("No zones to display")
+        else:
+            zone_map.add_class("hidden")
+
+    async def _render_zone_map(self) -> None:
+        """Fetch zone geometry and render the map."""
+        if not self._current_alert_zones:
+            return
+
+        zone_map = self.query_one("#zone-map", ZoneMap)
+        zone_map.clear()
+        zone_map.set_title("Loading zone geometry...")
+
+        # Fetch geometry for all zones
+        geometries = await self.nws_client.get_zones_geometry(self._current_alert_zones)
+
+        if not geometries:
+            zone_map.set_title("No geometry available")
+            return
+
+        # Color map for different alert types
+        zone_map.clear()
+
+        # Add each zone polygon
+        for zone_id, zone_geo in geometries.items():
+            for polygon in zone_geo.polygons:
+                zone_map.add_polygon(polygon, color="bright_red")
+
+        # Set title with zone count
+        zone_count = len(geometries)
+        zone_map.set_title(f"Affected Zones ({zone_count})")
+        zone_map.render_map()
+
     def action_add_wfo(self) -> None:
         """Show dialog to add a WFO."""
         self.push_screen(WFOInputDialog(), callback=self._on_add_wfo_result)
@@ -1013,6 +1084,9 @@ class WxDXX(App):
         self._read_items.add(item_id)
         sidebar.mark_item_as_read(item_id)
 
+        # Clear previous zones
+        self._current_alert_zones = []
+
         # Try to find in cache
         cached_alerts = self._cache.get_wfo_alerts(wfo_id)
         if cached_alerts:
@@ -1020,10 +1094,22 @@ class WxDXX(App):
                 if alert.id == alert_id or alert.sidebar_id.endswith(alert_id):
                     self._set_product_timing(issued=alert.effective, expires=alert.expires)
                     product_view.show_product(alert.title, alert.text)
+
+                    # Store affected zones for map display
+                    self._current_alert_zones = alert.affected_zones
+
+                    # If map is visible, render the zones
+                    if self._map_visible and self._current_alert_zones:
+                        self.run_worker(self._render_zone_map())
+                    elif self._map_visible:
+                        zone_map = self.query_one("#zone-map", ZoneMap)
+                        zone_map.clear()
+                        zone_map.set_title("No zones to display")
                     return
 
         # Not found in cache - show error (alerts should always be in cache)
         self._set_product_timing()
+        self._current_alert_zones = []
         product_view.show_error("Alert no longer available. Try refreshing.")
 
 
