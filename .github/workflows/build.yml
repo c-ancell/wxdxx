@@ -47,7 +47,7 @@ jobs:
 
       - name: Build executable
         run: |
-          pyinstaller --onefile --name wxdxx src/wxdxx/app.py
+          pyinstaller --onefile --name wxdxx src/wxdxx/__main__.py
 
       - name: Make executable (Unix)
         if: runner.os != 'Windows'
