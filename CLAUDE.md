@@ -142,8 +142,21 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 - METAR support
 - Handle empty MDs/watches on initial issuance: SPC sometimes publishes MDs and watches before the full content is available (appears in sidebar but content window is empty). Temporarily increase refresh rate for that specific product until full content is published and viewable.
 
+### Epic: Data Source Stewardship
+Findings from spike research on SPC/NWS API best practices. SPC robots.txt has 10-second crawl-delay (targets search crawlers, not interactive apps). NWS API requires User-Agent with contact info and has generous rate limits with retry-after-5s on throttle.
+
+1. **User-Agent with contact info** (Low effort, High impact): NWS requires contact info in User-Agent for developer outreach. Update from `WxDXX/0.1.0` to `WxDXX/0.1.0 (https://github.com/user/wxdxx, contact@email.com)`. Future-proofs for eventual API key transition.
+
+2. **Retry with exponential backoff** (Medium effort, High impact): Currently failed requests return None or propagate errors. Add retry logic (1s, 2s, 4s backoff, max 3 attempts) using httpx transport or tenacity. Critical foundation for empty MD/watch polling feature.
+
+3. **Conditional requests (ETag/If-Modified-Since)** (Medium effort, High impact): Both SPC and NWS support HTTP caching headers. Store ETag/Last-Modified with cached data, send If-None-Match/If-Modified-Since on requests. Reduces bandwidth 80%+ for unchanged content. Especially valuable for outlooks and zones.
+
+4. **Request rate limiting** (Low effort, Medium impact): Add async semaphore to limit concurrent requests per host (SPC: 2-3, NWS: 5-10). Important before adding METAR support or empty MD/watch polling which increase request frequency.
+
+5. **Smart cache invalidation** (Medium effort, High impact): Current TTL-based caching doesn't support nuanced needs of planned features. Implement per-product staleness tracking, targeted refresh without full cache clear, and content availability monitoring (empty → populated transition). Enables empty MD/watch feature cleanly.
+
 ### Spikes (Research/Discussion)
-- Research ways we can be better stewards of the data sources we're using (SPC, NWS API) and suggest the top 5 most impactful changes. Consider: rate limiting, caching strategies, User-Agent best practices, error handling for API outages, respecting robots.txt, reducing unnecessary requests.
+(None currently)
 
 ### Architecture
 - Screens directory contains unused stubs (OutlooksScreen, WatchesScreen, etc.) from early development. The current single-screen architecture with sidebar + ProductView is simpler and works well for this app's scope. Could delete the stubs or revisit if the app grows significantly more complex, but not a priority.
