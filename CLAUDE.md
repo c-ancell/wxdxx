@@ -23,7 +23,8 @@ src/wxdxx/
 │   ├── news_ticker.py  # Scrolling nationwide alerts ticker
 │   ├── help_screen.py  # Help modal with keyboard shortcuts
 │   ├── settings_screen.py # Settings modal for app configuration
-│   └── wfo_input.py    # WFO add/remove dialog
+│   ├── wfo_input.py    # WFO add/remove dialog
+│   └── zone_map.py     # Braille-rendered zone maps (BrailleCanvas, ZoneMap)
 └── screens/            # Screen stubs (not fully implemented)
 ```
 
@@ -145,6 +146,9 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 
 ## TODO / Not Yet Implemented
 
+### Small enhancements
+- News ticker: Flash new headlines on first scroll cycle, solid background on second cycle, then text color only. Currently shows solid background for both cycles before losing NEW designation.
+
 ### Larger effort
 - Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
@@ -180,24 +184,82 @@ Display geographic context for warnings, watches, MDs, and WFO coverage areas us
 - CWA (County Warning Area) boundaries for WFO coverage
 
 **Open questions:**
-1. Resolution vs. complexity - State-level (feasible) vs. county/zone-level (3000+ polygons)?
-2. Static vs. dynamic - Pre-made ASCII templates vs. runtime GeoJSON→ASCII conversion?
+1. ~~Resolution vs. complexity - State-level (feasible) vs. county/zone-level (3000+ polygons)?~~ **Answered:** Regional zoom makes county-level viable. Full US = state-level only (160×100 px, ~5px/county). Regional zoom to affected area (e.g., 20-60 counties in 120×80 px) = 160-480 px/county, enough for recognizable shapes. Approach: auto-zoom viewport to bounding box of affected zones.
+2. ~~Static vs. dynamic - Pre-made ASCII templates vs. runtime GeoJSON→ASCII conversion?~~ **Answered (2025-12-27):** Dynamic is recommended for regional/county maps.
+
+   **Static templates:**
+   - Pros: Simple (~50 lines), no deps, instant render, works with Rich styling
+   - Cons: Fixed resolution, state-level only, requires manual maintenance, limited accuracy
+   - Best for: Quick "which states affected?" overview if we want one
+
+   **Dynamic GeoJSON→Braille:**
+   - Pros: Accurate NWS boundaries, auto-zoom to affected area, county-level detail, future-proof
+   - Cons: More complex (~150 lines), extra API calls for zone geometry, ~50ms render time
+   - Best for: Regional maps showing affected zones with actual boundaries
+
+   **Key discovery:** NWS alerts don't embed geometry - they reference zone URLs. Zone endpoints (`/zones/forecast/{id}`) return full GeoJSON polygons (67-479 points per zone). We already fetch zone data for alerts, so geometry is available at no extra API cost.
+
+   **Recommendation:** Use dynamic rendering for alert/MD/watch maps (regional zoom with county detail). Consider adding a static US overview map for "at a glance" nationwide view, but this is lower priority.
 3. Integration - Modal screen, inline in ProductView, or separate panel?
-4. Data bundling - Fetch on-demand, bundle simplified boundaries, or cache locally?
+4. ~~Data bundling - Fetch on-demand, bundle simplified boundaries, or cache locally?~~ **Answered:** Fetch on-demand from NWS zone API. Zone geometry (67-479 points) is small enough to fetch per-request. We already fetch zone info for alerts; just need to include geometry. Cache with 24hr TTL (zones rarely change). No bundling needed.
 
 **Spikes to complete before implementation:**
 
-1. **Explore MapSCII rendering approach**: Study https://github.com/rastapasta/mapscii to understand Braille-based map rendering. Could we port concepts to Python/Textual? What resolution is achievable?
+1. ~~**Explore MapSCII rendering approach**~~: ✅ Complete (2025-12-27)
 
-2. **Inspect NWS alert geometry**: Fetch a real warning with geometry from api.weather.gov, examine GeoJSON structure. How complex are the polygons? Do we get state/county identifiers or just coordinates?
+   **How MapSCII works:** Uses Unicode Braille patterns (U+2800-U+28FF) where each character encodes a 2x4 dot matrix (8 dots total). The algorithm:
+   - Divide canvas into 2x4 pixel blocks
+   - For each block, calculate which of 8 dots are "on"
+   - Use bit mapping: `pixel_map = ((0x01, 0x08), (0x02, 0x10), (0x04, 0x20), (0x40, 0x80))`
+   - Unicode codepoint = `0x2800 + bits`
+
+   **Python implementation:** The [drawille](https://github.com/asciimoo/drawille) library (AGPL-3.0) already implements this. Simple API: `Canvas.set(x, y)` and `Canvas.frame()` to render. Could use directly or port the ~50 lines of core logic.
+
+   **Resolution achievable:**
+   - Each character cell = 2 pixels wide × 4 pixels tall
+   - 80-char terminal = 160 pixel width
+   - 40-line widget area = 160 pixel height
+   - For a US map: 160×160 is roughly enough for state-level detail but not county-level
+
+   **Textual integration:** No built-in Canvas widget, but can render Braille strings via `Static` or custom widget with Rich markup for colors. Tested successfully - Braille renders correctly in macOS Terminal.
+
+   **Compatibility concern:** Some fonts show hollow circles for "off" dots (e.g., GNOME Terminal default). Modern terminals (iTerm2, kitty, macOS Terminal) with good Unicode fonts work well.
+
+   **Conclusion:** Braille rendering is viable for state-level US maps. For our use case (highlighting affected states), 160×100 resolution is sufficient. We can either use drawille directly (adds AGPL dependency) or implement the ~50 lines ourselves.
+
+2. ~~**Inspect NWS alert geometry**~~: ✅ Complete (2025-12-27, covered in static vs dynamic spike)
+
+   **Finding:** Alerts don't embed geometry - they reference zone URLs (e.g., `https://api.weather.gov/zones/forecast/OKZ025`). Zone endpoints return full GeoJSON:
+   - Type: Polygon or MultiPolygon
+   - Complexity: 67-479 points per zone (tested OK, TX, KS, CO zones)
+   - Format: `[[lon, lat], ...]` coordinate arrays
+   - We already fetch zones for alert display; just need to request geometry field
 
 3. **Prototype ASCII US map**: Hand-draw a simple US map with state outlines (~40 lines tall). Test rendering in a Textual widget. Can individual states be highlighted legibly with Rich styling?
 
-4. **Evaluate Braille vs. block characters**: Test terminal compatibility for Braille characters (⠿⣿). Compare visual quality against standard block characters (█▀▄). What's the practical resolution difference?
+4. ~~**Evaluate Braille vs. block characters**~~: ✅ Complete (2025-12-27, covered in MapSCII spike)
+
+   Braille is superior: 2×4 dots per char vs 2×2 for block chars. Braille gives 160×160 resolution in 80×40 char area; blocks give 160×80. Both render well in modern terminals. Braille recommended.
 
 5. **UGC-to-state mapping**: We already parse UGC codes from warnings. Build a mapping from zone/county codes to state abbreviations. How complete can we make this without external data?
 
-**Potential MVP (after spikes):** Pre-generated ASCII US map with state outlines, highlight affected states based on UGC codes. Limits detail but covers most use cases with minimal complexity.
+**Prototype complete (2025-12-27):** `src/wxdxx/widgets/zone_map.py`
+- `BrailleCanvas`: Core rendering class (~180 lines)
+  - `set_pixel(x, y, color)`: Set individual pixels with color
+  - `draw_polygon(coords, bounds, color)`: Fill polygons using ray casting
+  - `draw_polygon_outline(coords, bounds, color)`: Draw outlines using Bresenham
+  - `render()`: Returns Rich Text with per-character dominant color
+- `ZoneMap(Static)`: Textual widget wrapper
+  - `add_polygon(coords, color)`: Add zones to render
+  - `set_title(title)`: Set map title
+  - `render_map()`: Trigger rendering with auto-zoom to bounds
+- Tested with real NWS zone geometry (67-615 points/zone)
+- Render time: ~50ms for 6 zones at 70x22 chars
+
+**Remaining for integration:**
+- Wire up to alert/MD/watch display (show map when viewing product)
+- Fetch zone geometry when loading alerts (extend NWS API client)
+- Add map toggle keybind (e.g., 'm' to show/hide map panel)
 
 ### Spikes (Research/Discussion)
 (None currently - see Epic sections above for spike items)

@@ -8,6 +8,7 @@ import httpx
 
 from ..models.alert import AlertSeverity, AlertUrgency, WFOAlert
 from ..models.wfo import WFOProduct
+from ..models.zone import ZoneGeometry
 
 
 class NWSClient:
@@ -30,6 +31,8 @@ class NWSClient:
         self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_REQUESTS)
         # Cache zone ID -> WFO ID mappings (zones rarely change)
         self._zone_wfo_cache: dict[str, str] = {}
+        # Cache zone ID -> geometry (zones rarely change, 24hr effective TTL)
+        self._zone_geometry_cache: dict[str, ZoneGeometry] = {}
 
     async def _get(self, url: str, **kwargs) -> httpx.Response:
         """Make a rate-limited GET request with retry on transient failures."""
@@ -100,6 +103,111 @@ class NWSClient:
             pass
 
         return ""
+
+    async def get_zone_geometry(self, zone_id: str) -> ZoneGeometry | None:
+        """Get the geometry for a forecast zone.
+
+        Args:
+            zone_id: Zone ID (e.g., "OKZ025", "TXZ001")
+
+        Returns:
+            ZoneGeometry with polygon coordinates, or None if not found.
+        """
+        # Check cache first
+        if zone_id in self._zone_geometry_cache:
+            return self._zone_geometry_cache[zone_id]
+
+        try:
+            response = await self._get(f"/zones/forecast/{zone_id}")
+            if response.status_code != 200:
+                return None
+            data = response.json()
+
+            # Extract geometry
+            geometry = data.get("geometry", {})
+            geo_type = geometry.get("type", "")
+            coords = geometry.get("coordinates", [])
+
+            polygons: list[list[tuple[float, float]]] = []
+
+            if geo_type == "Polygon":
+                # Polygon coordinates: [[[lon, lat], ...]]
+                # First ring is exterior, rest are holes (we just take exterior)
+                if coords and len(coords) > 0:
+                    exterior_ring = coords[0]
+                    polygons.append([(c[0], c[1]) for c in exterior_ring])
+
+            elif geo_type == "MultiPolygon":
+                # MultiPolygon coordinates: [[[[lon, lat], ...]], ...]
+                for polygon in coords:
+                    if polygon and len(polygon) > 0:
+                        exterior_ring = polygon[0]
+                        polygons.append([(c[0], c[1]) for c in exterior_ring])
+
+            if not polygons:
+                return None
+
+            # Extract properties
+            props = data.get("properties", {})
+            cwa_list = props.get("cwa", [])
+            cwa = cwa_list[0].upper() if cwa_list else ""
+
+            zone_geo = ZoneGeometry(
+                zone_id=zone_id,
+                name=props.get("name", ""),
+                state=props.get("state", ""),
+                cwa=cwa,
+                polygons=polygons,
+            )
+
+            # Cache the result
+            self._zone_geometry_cache[zone_id] = zone_geo
+            # Also update the WFO cache while we have the data
+            if cwa:
+                self._zone_wfo_cache[zone_id] = cwa
+
+            return zone_geo
+
+        except Exception:
+            return None
+
+    async def get_zones_geometry(
+        self, zone_ids: list[str]
+    ) -> dict[str, ZoneGeometry]:
+        """Get geometry for multiple forecast zones in parallel.
+
+        Args:
+            zone_ids: List of zone IDs (e.g., ["OKZ025", "TXZ001"])
+
+        Returns:
+            Dict mapping zone_id to ZoneGeometry (missing zones omitted).
+        """
+        if not zone_ids:
+            return {}
+
+        # Separate cached vs uncached
+        results: dict[str, ZoneGeometry] = {}
+        to_fetch: list[str] = []
+
+        for zone_id in zone_ids:
+            if zone_id in self._zone_geometry_cache:
+                results[zone_id] = self._zone_geometry_cache[zone_id]
+            else:
+                to_fetch.append(zone_id)
+
+        if not to_fetch:
+            return results
+
+        # Fetch uncached zones in parallel
+        fetched = await asyncio.gather(
+            *[self.get_zone_geometry(zone_id) for zone_id in to_fetch]
+        )
+
+        for zone_id, zone_geo in zip(to_fetch, fetched):
+            if zone_geo is not None:
+                results[zone_id] = zone_geo
+
+        return results
 
     async def get_wfo_zones(self, wfo_id: str) -> list[str]:
         """Fetch responsible forecast zones for a WFO.
