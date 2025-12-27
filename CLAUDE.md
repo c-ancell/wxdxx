@@ -145,7 +145,7 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 ### Epic: Data Source Stewardship
 Findings from spike research on SPC/NWS API best practices. SPC robots.txt has 10-second crawl-delay (targets search crawlers, not interactive apps). NWS API requires User-Agent with contact info and has generous rate limits with retry-after-5s on throttle.
 
-1. **User-Agent with contact info** (Low effort, High impact): NWS requires contact info in User-Agent for developer outreach. Update from `WxDXX/0.1.0` to `WxDXX/0.1.0 (https://github.com/user/wxdxx, contact@email.com)`. Future-proofs for eventual API key transition.
+1. ~~**User-Agent with contact info**~~: ✅ Done - Updated to `WxDXX/0.1.0 (https://github.com/c-ancell/wxdxx, wxdxxapp@gmail.com)` in both api/spc.py and api/nws.py.
 
 2. **Retry with exponential backoff** (Medium effort, High impact): Currently failed requests return None or propagate errors. Add retry logic (1s, 2s, 4s backoff, max 3 attempts) using httpx transport or tenacity. Critical foundation for empty MD/watch polling feature.
 

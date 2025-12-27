@@ -20,7 +20,7 @@ class NWSClient:
             base_url=self.BASE_URL,
             timeout=30.0,
             headers={
-                "User-Agent": "SPC-Dash/0.1.0",
+                "User-Agent": "WxDXX/0.1.0 (https://github.com/c-ancell/wxdxx, wxdxxapp@gmail.com)",
                 "Accept": "application/geo+json",
             },
         )
