@@ -172,12 +172,12 @@ class WxDXX(App):
     """
 
     BINDINGS = [
-        Binding("q", "quit", "Quit"),
-        Binding("r", "refresh", "Refresh"),
-        Binding("s", "settings", "Settings"),
-        Binding("w", "add_wfo", "Add WFO"),
+        Binding("q", "quit", "Quit", show=False),
+        Binding("r", "refresh", "Refresh", show=False),
+        Binding("s", "settings", "Settings", show=False),
+        Binding("w", "add_wfo", "Add WFO", show=False),
         Binding("W", "remove_wfo", "Remove WFO", show=False),
-        Binding("?", "help", "Help"),
+        Binding("?", "help", "Help"),  # Only show help hint; all shortcuts documented there
         Binding("tab", "toggle_focus", "Switch Panel", show=False),
         Binding("1", "view_day1", "Day 1", show=False),
         Binding("2", "view_day2", "Day 2", show=False),

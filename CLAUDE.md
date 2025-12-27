@@ -111,8 +111,8 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 ### Larger effort
 - Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
-- Status bar cleanup: information (refresh time, product timing, clocks) is starting to overlap with quick-key commands. Consider leaving only "?" in the footer and moving all other hotkey shortcuts into the help menu (verify they're all documented there first)
 - Add "R" (SHIFT+r) for hard refresh: Currently 'r' clears all caches and refreshes. Consider making 'r' a soft refresh (use cached data if valid) and 'R' a hard refresh (clear all caches first). This would make auto-refresh and 'r' behave the same way.
+- Unread indicators: When products arrive/update in sidebar, show a filled circle (●) to the left of the product name indicating "unread". Circle disappears once product is loaded into main content view. Use dark circle for highlighted (colored) items, light circle for regular items.
 
 ### Epic: News Ticker for Watches/Warnings
 **Concept:** A scrolling news-ticker bar at the top of the UI showing new watches and warnings issued nationwide. Headlines scroll infinitely.
@@ -128,4 +128,4 @@ When the user asks to add a TODO, always add it to the "TODO / Not Yet Implement
 **To flesh out:** Data source, refresh strategy, headline priority/ordering, scroll speed, max headlines
 
 ### Architecture
-- Screens are stubs - all rendering happens in main app
+- Screens directory contains unused stubs (OutlooksScreen, WatchesScreen, etc.) from early development. The current single-screen architecture with sidebar + ProductView is simpler and works well for this app's scope. Could delete the stubs or revisit if the app grows significantly more complex, but not a priority.
