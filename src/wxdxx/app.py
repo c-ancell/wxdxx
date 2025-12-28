@@ -1197,10 +1197,9 @@ class WxDXX(App):
         self._current_alert_wfo = ""
         self._current_alert_event = ""
 
-        # Try to find in cache
-        cached_alerts = self._cache.get_wfo_alerts(wfo_id)
-        if cached_alerts:
-            for alert in cached_alerts:
+        async def find_and_display_alert(alerts: list[WFOAlert]) -> bool:
+            """Find alert by ID and display it. Returns True if found."""
+            for alert in alerts:
                 if alert.id == alert_id or alert.sidebar_id.endswith(alert_id):
                     self._set_product_timing(issued=alert.effective, expires=alert.expires)
 
@@ -1231,14 +1230,37 @@ class WxDXX(App):
                         zone_map = self.query_one("#zone-map", ZoneMap)
                         zone_map.clear()
                         zone_map.set_title("No zones to display")
-                    return
+                    return True
+            return False
 
-        # Not found in cache - show error (alerts should always be in cache)
+        # Try cache first
+        cached_alerts = self._cache.get_wfo_alerts(wfo_id)
+        if cached_alerts and await find_and_display_alert(cached_alerts):
+            return
+
+        # Cache miss or not found - try re-fetching
+        product_view.show_loading("Fetching alert...")
+
+        try:
+            # Get zones for this WFO (use cached if available)
+            zones = self._cache.get_wfo_zones(wfo_id)
+            if zones is None:
+                zones = await self.nws_client.get_wfo_zones(wfo_id)
+                self._cache.set_wfo_zones(wfo_id, zones)
+
+            if zones:
+                # Fetch fresh alerts
+                alerts = await self.nws_client.get_active_alerts(zones)
+                self._cache.set_wfo_alerts(wfo_id, alerts)
+
+                if await find_and_display_alert(alerts):
+                    return
+        except Exception as e:
+            self.log.warning(f"Failed to re-fetch alerts for {wfo_id}: {e}")
+
+        # Still not found - alert has truly expired or been cancelled
         self._set_product_timing()
-        self._current_alert_zones = []
-        self._current_alert_wfo = ""
-        self._current_alert_event = ""
-        product_view.show_error("Alert no longer available. Try refreshing.")
+        product_view.show_error("Alert no longer available. It may have expired or been cancelled.")
 
     async def _get_alert_nearby_observations(
         self, zone_ids: list[str], limit: int = 10
