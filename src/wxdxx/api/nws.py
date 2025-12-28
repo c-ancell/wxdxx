@@ -488,6 +488,7 @@ class NWSClient:
                     expires=self._parse_datetime(props.get("expires")),
                     area_desc=props.get("areaDesc"),
                     affected_zones=zone_ids,
+                    message_type=props.get("messageType", "Alert"),
                 )
             )
 

@@ -239,9 +239,10 @@ class WxDXX(App):
         self._fast_poll_tasks: dict[str, asyncio.Task] = {}
         # Map visibility state
         self._map_visible: bool = False
-        # Current alert's affected zones and WFO (for map display)
+        # Current alert's affected zones, WFO, and event type (for map display)
         self._current_alert_zones: list[str] = []
         self._current_alert_wfo: str = ""
+        self._current_alert_event: str = ""
 
     def _set_product_timing(
         self,
@@ -545,6 +546,7 @@ class WxDXX(App):
                         source="nws",
                         wfo=alert.wfo,
                         expires=alert.expires,
+                        is_update=alert.message_type == "Update",
                     )
                 )
         except Exception as e:
@@ -930,13 +932,14 @@ class WxDXX(App):
                 for polygon in zone_geo.polygons:
                     zone_map.add_polygon(polygon, color="bright_black", outline_only=True)
 
-        # Second pass: render affected zones as filled red (on top of outlines)
+        # Second pass: render affected zones with event-specific color (on top of outlines)
         affected_count = 0
+        alert_color = self._get_alert_map_color(self._current_alert_event)
         for zone_id in self._current_alert_zones:
             if zone_id in context_geometries:
                 zone_geo = context_geometries[zone_id]
                 for polygon in zone_geo.polygons:
-                    zone_map.add_polygon(polygon, color="bright_red", outline_only=False)
+                    zone_map.add_polygon(polygon, color=alert_color, outline_only=False)
                 affected_count += 1
 
         # Set title with counts
@@ -951,6 +954,53 @@ class WxDXX(App):
 
         # Render in a thread to avoid blocking the event loop
         await asyncio.to_thread(zone_map.render_map)
+
+    def _get_alert_map_color(self, event: str) -> str:
+        """Get the map fill color for an alert based on event type.
+
+        Uses Rich color names that approximate NWS-standard colors.
+        Colors are chosen for visibility in Braille rendering.
+        """
+        event_lower = event.lower()
+
+        # Tornado - bright red (highest priority)
+        if "tornado" in event_lower and "warning" in event_lower:
+            return "bright_red"
+        # Severe Thunderstorm - yellow/orange
+        if "severe thunderstorm" in event_lower:
+            return "yellow"
+        # Flash Flood - dark red
+        if "flash flood" in event_lower:
+            return "red"
+        # Flood Warning - green
+        if "flood" in event_lower and "warning" in event_lower:
+            return "bright_green"
+        # Flood Watch/Advisory - lighter green
+        if "flood" in event_lower:
+            return "green"
+        # Winter Storm Warning - magenta/pink
+        if "winter storm" in event_lower and "warning" in event_lower:
+            return "bright_magenta"
+        # Winter Weather Advisory - lighter magenta
+        if "winter" in event_lower:
+            return "magenta"
+        # High Wind Warning - tan/brown approximation
+        if "high wind" in event_lower:
+            return "bright_yellow"
+        # Heat - orange/red
+        if "heat" in event_lower:
+            return "bright_red"
+        # Generic warnings - red
+        if "warning" in event_lower:
+            return "red"
+        # Generic watches - orange
+        if "watch" in event_lower:
+            return "yellow"
+        # Generic advisories - yellow
+        if "advisory" in event_lower:
+            return "bright_yellow"
+        # Default fallback
+        return "bright_red"
 
     def action_add_wfo(self) -> None:
         """Show dialog to add a WFO."""
@@ -1180,9 +1230,10 @@ class WxDXX(App):
         self._read_items.add(item_id)
         sidebar.mark_item_as_read(item_id)
 
-        # Clear previous zones
+        # Clear previous alert state
         self._current_alert_zones = []
         self._current_alert_wfo = ""
+        self._current_alert_event = ""
 
         # Try to find in cache
         cached_alerts = self._cache.get_wfo_alerts(wfo_id)
@@ -1204,11 +1255,12 @@ class WxDXX(App):
 
                     product_view.show_product(alert.title, alert_text)
 
-                    # Store affected zones and WFO for map display
+                    # Store affected zones, WFO, and event type for map display
                     # Use the tracked WFO ID (wfo_id) since alert.wfo can be
                     # unreliable (e.g., "DEN" instead of "BOU" for Denver area)
                     self._current_alert_zones = alert.affected_zones
                     self._current_alert_wfo = wfo_id
+                    self._current_alert_event = alert.event
 
                     # If map is visible, render the zones
                     if self._map_visible and self._current_alert_zones:
@@ -1223,6 +1275,7 @@ class WxDXX(App):
         self._set_product_timing()
         self._current_alert_zones = []
         self._current_alert_wfo = ""
+        self._current_alert_event = ""
         product_view.show_error("Alert no longer available. Try refreshing.")
 
     async def _get_alert_nearby_observations(

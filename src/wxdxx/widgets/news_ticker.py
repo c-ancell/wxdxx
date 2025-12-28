@@ -18,6 +18,7 @@ class TickerHeadline:
     source: str  # "nws" or "spc"
     wfo: str | None = None
     is_new: bool = True
+    is_update: bool = False  # True if this is an update to an existing alert
     appearance_count: int = 0
     first_seen: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     expires: datetime | None = None
@@ -231,6 +232,7 @@ class NewsTicker(Widget):
                         prev.is_new
                         and prev.appearance_count < self.NEW_THRESHOLD_APPEARANCES
                     )
+                    headline.is_update = prev.is_update
                     headline.first_seen = prev.first_seen
 
         # Update known IDs (remove expired ones)
@@ -267,7 +269,8 @@ class NewsTicker(Widget):
         parts = []
         for headline in self._headlines:
             if headline.is_new:
-                parts.append(f"***NEW: {headline.text}***")
+                prefix = "UPDATE" if headline.is_update else "NEW"
+                parts.append(f"***{prefix}: {headline.text}***")
             else:
                 parts.append(headline.text)
 
@@ -391,9 +394,10 @@ class NewsTicker(Widget):
         return len(self._plain_text) - pos
 
     def _get_headline_display_text(self, headline: TickerHeadline) -> str:
-        """Get the display text for a headline (with or without NEW prefix)."""
+        """Get the display text for a headline (with or without NEW/UPDATE prefix)."""
         if headline.is_new:
-            return f"***NEW: {headline.text}***"
+            prefix = "UPDATE" if headline.is_update else "NEW"
+            return f"***{prefix}: {headline.text}***"
         return headline.text
 
     def _get_headline_style(self, headline: TickerHeadline) -> str:

@@ -41,6 +41,7 @@ class WFOAlert(BaseModel):
     expires: datetime | None = None
     area_desc: str | None = None  # Human-readable affected area
     affected_zones: list[str] = []  # Zone IDs (e.g., ["OKZ025", "OKZ026"])
+    message_type: str = "Alert"  # "Alert", "Update", or "Cancel"
 
     @property
     def title(self) -> str:
