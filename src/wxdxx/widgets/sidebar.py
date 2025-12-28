@@ -8,6 +8,13 @@ from textual.containers import Vertical
 from textual.message import Message
 from textual.widgets import Label, ListItem, ListView, Static
 
+from wxdxx.colors import (
+    generate_sidebar_css,
+    get_alert_css_class,
+    get_md_css_class,
+    get_wfo_css_class,
+)
+
 
 class VimListView(ListView):
     """ListView with vim-style keyboard navigation."""
@@ -179,284 +186,7 @@ class Sidebar(Vertical):
         text-style: bold;
     }
 
-    /* Watch severity colors (NWS standard) */
-    Sidebar ListItem.watch-tor {
-        background: #ff0000;
-        color: #ffffff;
-    }
-    Sidebar ListItem.watch-tor:hover {
-        background: #cc0000;
-    }
-    Sidebar ListItem.watch-svr {
-        background: #ffff00;
-        color: #000000;
-    }
-    Sidebar ListItem.watch-svr:hover {
-        background: #cccc00;
-    }
-    Sidebar ListItem.watch-pds {
-        background: #ff00ff;
-        color: #ffffff;
-    }
-    Sidebar ListItem.watch-pds:hover {
-        background: #cc00cc;
-    }
-
-    /* Outlook risk level colors (NWS/SPC standard) */
-    Sidebar ListItem.risk-tstm {
-        background: #90ee90;
-        color: #000000;
-    }
-    Sidebar ListItem.risk-tstm:hover {
-        background: #70ce70;
-    }
-    Sidebar ListItem.risk-mrgl {
-        background: #008000;
-        color: #ffffff;
-    }
-    Sidebar ListItem.risk-mrgl:hover {
-        background: #006600;
-    }
-    Sidebar ListItem.risk-slgt {
-        background: #ffff00;
-        color: #000000;
-    }
-    Sidebar ListItem.risk-slgt:hover {
-        background: #cccc00;
-    }
-    Sidebar ListItem.risk-enh {
-        background: #ffa500;
-        color: #000000;
-    }
-    Sidebar ListItem.risk-enh:hover {
-        background: #cc8400;
-    }
-    Sidebar ListItem.risk-mdt {
-        background: #ff0000;
-        color: #ffffff;
-    }
-    Sidebar ListItem.risk-mdt:hover {
-        background: #cc0000;
-    }
-    Sidebar ListItem.risk-high {
-        background: #ff00ff;
-        color: #ffffff;
-    }
-    Sidebar ListItem.risk-high:hover {
-        background: #cc00cc;
-    }
-
-    /* MD watch probability colors */
-    Sidebar ListItem.md-prob-med {
-        background: #fffacd;
-        color: #000000;
-    }
-    Sidebar ListItem.md-prob-med:hover {
-        background: #e6e1b8;
-    }
-    Sidebar ListItem.md-prob-high {
-        background: #ffd700;
-        color: #000000;
-    }
-    Sidebar ListItem.md-prob-high:hover {
-        background: #ccac00;
-    }
-    Sidebar ListItem.md-prob-likely {
-        background: #ff6347;
-        color: #ffffff;
-    }
-    Sidebar ListItem.md-prob-likely:hover {
-        background: #cc4f39;
-    }
-
-    /* WFO product type colors */
-    Sidebar ListItem.wfo-warn-tor {
-        background: #ff0000;
-        color: #ffffff;
-    }
-    Sidebar ListItem.wfo-warn-tor:hover {
-        background: #cc0000;
-    }
-    Sidebar ListItem.wfo-warn-svr {
-        background: #ffa500;
-        color: #000000;
-    }
-    Sidebar ListItem.wfo-warn-svr:hover {
-        background: #cc8400;
-    }
-    Sidebar ListItem.wfo-warn-ffw {
-        background: #228b22;
-        color: #ffffff;
-    }
-    Sidebar ListItem.wfo-warn-ffw:hover {
-        background: #1b6f1b;
-    }
-    Sidebar ListItem.wfo-warn-wsw {
-        background: #ffb6c1;
-        color: #000000;
-    }
-    Sidebar ListItem.wfo-warn-wsw:hover {
-        background: #cc919a;
-    }
-    Sidebar ListItem.wfo-stmt {
-        background: #f0e68c;
-        color: #000000;
-    }
-    Sidebar ListItem.wfo-stmt:hover {
-        background: #c0b870;
-    }
-
-    /* Alert colors (NWS standard per-event colors) */
-    /* Tornado */
-    Sidebar ListItem.alert-tor {
-        background: #ff0000;
-        color: #ffffff;
-    }
-    Sidebar ListItem.alert-tor:hover {
-        background: #cc0000;
-    }
-    /* Severe Thunderstorm */
-    Sidebar ListItem.alert-svr {
-        background: #ffa500;
-        color: #000000;
-    }
-    Sidebar ListItem.alert-svr:hover {
-        background: #cc8400;
-    }
-    /* Flash Flood */
-    Sidebar ListItem.alert-ffw {
-        background: #8b0000;
-        color: #ffffff;
-    }
-    Sidebar ListItem.alert-ffw:hover {
-        background: #6e0000;
-    }
-    /* Flood Warning */
-    Sidebar ListItem.alert-flw {
-        background: #00ff00;
-        color: #000000;
-    }
-    Sidebar ListItem.alert-flw:hover {
-        background: #00cc00;
-    }
-    /* Flood Watch/Advisory */
-    Sidebar ListItem.alert-fla {
-        background: #2e8b57;
-        color: #ffffff;
-    }
-    Sidebar ListItem.alert-fla:hover {
-        background: #256f46;
-    }
-    /* Winter Storm Warning */
-    Sidebar ListItem.alert-wsw {
-        background: #ff69b4;
-        color: #000000;
-    }
-    Sidebar ListItem.alert-wsw:hover {
-        background: #cc5490;
-    }
-    /* Winter Storm Watch */
-    Sidebar ListItem.alert-wsa {
-        background: #4169e1;
-        color: #ffffff;
-    }
-    Sidebar ListItem.alert-wsa:hover {
-        background: #3454b4;
-    }
-    /* Winter Weather Advisory */
-    Sidebar ListItem.alert-wwa {
-        background: #7b68ee;
-        color: #ffffff;
-    }
-    Sidebar ListItem.alert-wwa:hover {
-        background: #6253be;
-    }
-    /* Wind Advisory */
-    Sidebar ListItem.alert-wind {
-        background: #d2b48c;
-        color: #000000;
-    }
-    Sidebar ListItem.alert-wind:hover {
-        background: #a89070;
-    }
-    /* High Wind Warning */
-    Sidebar ListItem.alert-hww {
-        background: #daa520;
-        color: #000000;
-    }
-    Sidebar ListItem.alert-hww:hover {
-        background: #ae841a;
-    }
-    /* Heat Advisory */
-    Sidebar ListItem.alert-heat {
-        background: #ff7f50;
-        color: #000000;
-    }
-    Sidebar ListItem.alert-heat:hover {
-        background: #cc6640;
-    }
-    /* Excessive Heat Warning */
-    Sidebar ListItem.alert-ehw {
-        background: #c71585;
-        color: #ffffff;
-    }
-    Sidebar ListItem.alert-ehw:hover {
-        background: #9f116a;
-    }
-    /* Freeze Warning */
-    Sidebar ListItem.alert-frz {
-        background: #483d8b;
-        color: #ffffff;
-    }
-    Sidebar ListItem.alert-frz:hover {
-        background: #3a316f;
-    }
-    /* Frost Advisory */
-    Sidebar ListItem.alert-fst {
-        background: #6495ed;
-        color: #000000;
-    }
-    Sidebar ListItem.alert-fst:hover {
-        background: #5077be;
-    }
-    /* Dense Fog Advisory */
-    Sidebar ListItem.alert-fog {
-        background: #708090;
-        color: #ffffff;
-    }
-    Sidebar ListItem.alert-fog:hover {
-        background: #5a6673;
-    }
-    /* Special Weather Statement */
-    Sidebar ListItem.alert-sps {
-        background: #ffe4b5;
-        color: #000000;
-    }
-    Sidebar ListItem.alert-sps:hover {
-        background: #ccb691;
-    }
-    /* Generic fallbacks */
-    Sidebar ListItem.alert-warning {
-        background: #ff0000;
-        color: #ffffff;
-    }
-    Sidebar ListItem.alert-warning:hover {
-        background: #cc0000;
-    }
-    Sidebar ListItem.alert-watch {
-        background: #ffa500;
-        color: #000000;
-    }
-    Sidebar ListItem.alert-watch:hover {
-        background: #cc8400;
-    }
-    Sidebar ListItem.alert-advisory {
-        background: #ffff00;
-        color: #000000;
-    }
-    Sidebar ListItem.alert-advisory:hover {
-        background: #cccc00;
-    }
+""" + generate_sidebar_css() + """
     """
 
     class ItemSelected(Message):
@@ -496,15 +226,7 @@ class Sidebar(Vertical):
 
     def _get_md_severity_class(self, watch_prob: int | None) -> str | None:
         """Get CSS class based on MD watch probability."""
-        if watch_prob is None:
-            return None
-        if watch_prob >= 80:
-            return "md-prob-likely"
-        if watch_prob >= 60:
-            return "md-prob-high"
-        if watch_prob >= 20:
-            return "md-prob-med"
-        return None  # Low probability, no highlighting
+        return get_md_css_class(watch_prob)
 
     def update_mds(
         self,
@@ -678,73 +400,11 @@ class Sidebar(Vertical):
 
     def _get_wfo_severity_class(self, product_type: str) -> str | None:
         """Get CSS class for WFO product type."""
-        product_type = product_type.upper()
-
-        if product_type == "TOR":
-            return "wfo-warn-tor"
-        elif product_type == "SVR":
-            return "wfo-warn-svr"
-        elif product_type == "FFW":
-            return "wfo-warn-ffw"
-        elif product_type == "WSW":
-            return "wfo-warn-wsw"
-        elif product_type == "SPS":
-            return "wfo-stmt"
-        else:
-            return None  # AFD, HWO, ZFP, NOW - no special coloring
+        return get_wfo_css_class(product_type)
 
     def _get_alert_severity_class(self, event: str) -> str | None:
-        """Get CSS class for alert based on event type.
-
-        Uses NWS-standard colors for each specific alert type.
-        Falls back to generic warning/watch/advisory colors for unknown types.
-        """
-        event_lower = event.lower()
-
-        # Specific event types with NWS colors
-        if "tornado" in event_lower:
-            if "warning" in event_lower:
-                return "alert-tor"
-            return "alert-watch"  # Tornado Watch uses generic watch orange
-        elif "severe thunderstorm" in event_lower:
-            return "alert-svr"
-        elif "flash flood" in event_lower:
-            return "alert-ffw"
-        elif "flood" in event_lower:
-            if "warning" in event_lower:
-                return "alert-flw"
-            return "alert-fla"  # Watch or advisory
-        elif "winter storm" in event_lower:
-            if "warning" in event_lower:
-                return "alert-wsw"
-            return "alert-wsa"  # Watch
-        elif "winter weather" in event_lower:
-            return "alert-wwa"
-        elif "high wind" in event_lower:
-            return "alert-hww"
-        elif "wind" in event_lower and "advisory" in event_lower:
-            return "alert-wind"
-        elif "excessive heat" in event_lower:
-            return "alert-ehw"
-        elif "heat" in event_lower:
-            return "alert-heat"
-        elif "freeze" in event_lower:
-            return "alert-frz"
-        elif "frost" in event_lower:
-            return "alert-fst"
-        elif "fog" in event_lower:
-            return "alert-fog"
-        elif "special weather statement" in event_lower:
-            return "alert-sps"
-        # Generic fallbacks
-        elif "warning" in event_lower:
-            return "alert-warning"
-        elif "watch" in event_lower:
-            return "alert-watch"
-        elif "advisory" in event_lower:
-            return "alert-advisory"
-        else:
-            return None
+        """Get CSS class for alert based on event type."""
+        return get_alert_css_class(event)
 
     def update_wfo_products(
         self,

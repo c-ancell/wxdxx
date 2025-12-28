@@ -13,6 +13,7 @@ from textual.widgets import Footer, Header, Static
 from .api.nws import NWSClient
 from .api.spc import SPCClient
 from .cache import ProductCache
+from .colors import get_map_color
 from .config import TICKER_SPEED_INTERVALS, AppConfig
 from .models.alert import WFOAlert
 from .models.md import MesoscaleDiscussion
@@ -956,51 +957,8 @@ class WxDXX(App):
         await asyncio.to_thread(zone_map.render_map)
 
     def _get_alert_map_color(self, event: str) -> str:
-        """Get the map fill color for an alert based on event type.
-
-        Uses Rich color names that approximate NWS-standard colors.
-        Colors are chosen for visibility in Braille rendering.
-        """
-        event_lower = event.lower()
-
-        # Tornado - bright red (highest priority)
-        if "tornado" in event_lower and "warning" in event_lower:
-            return "bright_red"
-        # Severe Thunderstorm - yellow/orange
-        if "severe thunderstorm" in event_lower:
-            return "yellow"
-        # Flash Flood - dark red
-        if "flash flood" in event_lower:
-            return "red"
-        # Flood Warning - green
-        if "flood" in event_lower and "warning" in event_lower:
-            return "bright_green"
-        # Flood Watch/Advisory - lighter green
-        if "flood" in event_lower:
-            return "green"
-        # Winter Storm Warning - magenta/pink
-        if "winter storm" in event_lower and "warning" in event_lower:
-            return "bright_magenta"
-        # Winter Weather Advisory - lighter magenta
-        if "winter" in event_lower:
-            return "magenta"
-        # High Wind Warning - tan/brown approximation
-        if "high wind" in event_lower:
-            return "bright_yellow"
-        # Heat - orange/red
-        if "heat" in event_lower:
-            return "bright_red"
-        # Generic warnings - red
-        if "warning" in event_lower:
-            return "red"
-        # Generic watches - orange
-        if "watch" in event_lower:
-            return "yellow"
-        # Generic advisories - yellow
-        if "advisory" in event_lower:
-            return "bright_yellow"
-        # Default fallback
-        return "bright_red"
+        """Get the map fill color for an alert based on event type."""
+        return get_map_color(event)
 
     def action_add_wfo(self) -> None:
         """Show dialog to add a WFO."""

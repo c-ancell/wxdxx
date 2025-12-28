@@ -7,6 +7,13 @@ from rich.console import RenderableType
 from rich.text import Text
 from textual.widget import Widget
 
+from wxdxx.colors import (
+    TICKER_BG_COLORS,
+    TICKER_DEFAULT_BG,
+    TICKER_DEFAULT_FG,
+    TICKER_FG_COLORS,
+)
+
 
 @dataclass
 class TickerHeadline:
@@ -22,48 +29,6 @@ class TickerHeadline:
     appearance_count: int = 0
     first_seen: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     expires: datetime | None = None
-
-
-# NWS standard colors for weather events
-# Background colors for NEW headlines (tuple: bg_color, text_color)
-EVENT_BG_COLORS: dict[str, tuple[str, str]] = {
-    "TOR": ("red", "white"),
-    "SVR": ("yellow", "black"),
-    "FFW": ("dark_green", "white"),
-    "FLW": ("green", "black"),
-    "TOA": ("yellow", "black"),  # Tornado watch
-    "SVA": ("dark_goldenrod", "black"),  # Severe thunderstorm watch
-    "WSW": ("deep_pink4", "white"),  # Winter storm warning - darker pink
-    "WWY": ("purple4", "white"),  # Winter weather advisory - darker purple
-    "BZW": ("red1", "white"),  # Blizzard warning
-    "ISW": ("dark_magenta", "white"),  # Ice storm warning
-    "HWW": ("dark_goldenrod", "black"),  # High wind warning
-    "EHW": ("magenta", "white"),  # Excessive heat warning
-    "SPC_TOR": ("red", "white"),  # SPC Tornado watch
-    "SPC_SVR": ("yellow", "black"),  # SPC Severe watch
-}
-
-# Foreground (text) colors for regular headlines
-EVENT_FG_COLORS: dict[str, str] = {
-    "TOR": "red",
-    "SVR": "orange1",
-    "FFW": "green",
-    "FLW": "dark_green",
-    "TOA": "yellow",
-    "SVA": "dark_goldenrod",
-    "WSW": "deep_pink3",  # Winter storm warning
-    "WWY": "medium_purple1",  # Winter weather advisory
-    "BZW": "red1",
-    "ISW": "magenta",  # Ice storm warning
-    "HWW": "dark_goldenrod",
-    "EHW": "magenta",
-    "SPC_TOR": "red",
-    "SPC_SVR": "yellow",
-}
-
-# Default colors for unrecognized event types
-DEFAULT_BG_COLOR = "blue"
-DEFAULT_FG_COLOR = "cyan"
 
 
 class NewsTicker(Widget):
@@ -414,7 +379,7 @@ class NewsTicker(Widget):
 
         if headline.appearance_count == 0:
             # First cycle: Flash effect - alternate between solid bg and inverse
-            colors = EVENT_BG_COLORS.get(event_key, (DEFAULT_BG_COLOR, "white"))
+            colors = TICKER_BG_COLORS.get(event_key, (TICKER_DEFAULT_BG, "white"))
             bg_color, text_color = colors
             if self._flash_state:
                 # Solid background (visible state)
@@ -424,12 +389,12 @@ class NewsTicker(Widget):
                 return f"bold reverse {bg_color}"
         elif headline.appearance_count == 1:
             # Second cycle: Solid background color
-            colors = EVENT_BG_COLORS.get(event_key, (DEFAULT_BG_COLOR, "white"))
+            colors = TICKER_BG_COLORS.get(event_key, (TICKER_DEFAULT_BG, "white"))
             bg_color, text_color = colors
             return f"bold {text_color} on {bg_color}"
         else:
             # Regular: Foreground color only
-            fg_color = EVENT_FG_COLORS.get(event_key, DEFAULT_FG_COLOR)
+            fg_color = TICKER_FG_COLORS.get(event_key, TICKER_DEFAULT_FG)
             return f"bold {fg_color}"
 
     def pause(self) -> None:
