@@ -113,7 +113,7 @@ class BrailleCanvas:
     width: int = 60  # Character width
     height: int = 25  # Character height
     _pixels: dict[tuple[int, int], int] = field(default_factory=dict, repr=False)
-    _pixel_colors: dict[tuple[int, int], str] = field(default_factory=dict, repr=False)
+    _pixel_colors: dict[tuple[int, int], tuple[str, int]] = field(default_factory=dict, repr=False)  # (color, priority)
 
     @property
     def pixel_width(self) -> int:
@@ -130,14 +130,23 @@ class BrailleCanvas:
         self._pixels.clear()
         self._pixel_colors.clear()
 
-    def set_pixel(self, x: int, y: int, color: str = "white") -> None:
-        """Set a pixel at the given coordinates."""
+    def set_pixel(self, x: int, y: int, color: str = "white", priority: int = 0) -> None:
+        """Set a pixel at the given coordinates.
+
+        Args:
+            x: X coordinate (pixel)
+            y: Y coordinate (pixel)
+            color: Rich color name
+            priority: Higher priority colors override lower (default 0 for fills, 10 for markers)
+        """
         if 0 <= x < self.pixel_width and 0 <= y < self.pixel_height:
             col, row = x // 2, y // 4
             self._pixels.setdefault((row, col), 0)
             self._pixels[(row, col)] |= PIXEL_MAP[y % 4][x % 2]
-            # Store per-pixel color for better color blending
-            self._pixel_colors[(x, y)] = color
+            # Only update color if new priority is >= existing
+            existing = self._pixel_colors.get((x, y))
+            if existing is None or priority >= existing[1]:
+                self._pixel_colors[(x, y)] = (color, priority)
 
     def _point_in_polygon(
         self, x: float, y: float, polygon: list[tuple[float, float]]
@@ -278,30 +287,41 @@ class BrailleCanvas:
         px = int((lon - min_lon) * scale_x)
         py = int((max_lat - lat) * scale_y)
 
-        # Draw a small 3x3 cross pattern
-        self.set_pixel(px, py, color)
-        self.set_pixel(px - 1, py, color)
-        self.set_pixel(px + 1, py, color)
-        self.set_pixel(px, py - 1, color)
-        self.set_pixel(px, py + 1, color)
+        # Draw a small 3x3 cross pattern with high priority (10) to override fills
+        self.set_pixel(px, py, color, priority=10)
+        self.set_pixel(px - 1, py, color, priority=10)
+        self.set_pixel(px + 1, py, color, priority=10)
+        self.set_pixel(px, py - 1, color, priority=10)
+        self.set_pixel(px, py + 1, color, priority=10)
         return True
 
     def _get_cell_color(self, row: int, col: int) -> str:
-        """Get the dominant color for a character cell."""
-        # Collect colors of all pixels in this cell
-        colors: dict[str, int] = {}
+        """Get the dominant color for a character cell.
+
+        Priority-based: if any pixel has a higher priority, that color wins.
+        Among equal priorities, most common color wins.
+        """
+        # Collect colors and priorities of all pixels in this cell
+        max_priority = -1
+        colors_at_max: dict[str, int] = {}
+
         for dy in range(4):
             for dx in range(2):
                 px, py = col * 2 + dx, row * 4 + dy
                 if (px, py) in self._pixel_colors:
-                    c = self._pixel_colors[(px, py)]
-                    colors[c] = colors.get(c, 0) + 1
+                    color, priority = self._pixel_colors[(px, py)]
+                    if priority > max_priority:
+                        # New highest priority - reset color counts
+                        max_priority = priority
+                        colors_at_max = {color: 1}
+                    elif priority == max_priority:
+                        colors_at_max[color] = colors_at_max.get(color, 0) + 1
 
-        if not colors:
+        if not colors_at_max:
             return "white"
 
-        # Return the most common color
-        return max(colors, key=lambda c: colors[c])
+        # Return the most common color at the highest priority level
+        return max(colors_at_max, key=lambda c: colors_at_max[c])
 
     def render(self) -> Text:
         """Render the canvas as Rich Text with colors."""
