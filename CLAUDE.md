@@ -418,8 +418,7 @@ logger.error("Failed to parse response", exc_info=True)
 
 **6. ~~Add Cache Unit Tests~~**: ✅ Done - Added 44 tests in `tests/test_cache.py` covering TTLCache (14 tests) and ProductCache (30 tests). Tests cover: TTL expiration, LRU eviction, targeted invalidation patterns, empty content detection, staleness tracking, and statistics.
 
-**7. Enable mypy**
-Add to CI/pre-commit. Start with `--ignore-missing-imports` and tighten over time.
+**7. ~~Enable mypy~~**: ✅ Done - Added mypy to dev dependencies and configured in pyproject.toml with permissive settings (`ignore_missing_imports=true`, `disallow_untyped_defs=false`). Fixed 15 type errors including incorrect imports, BaseException checks, return type annotations, and type narrowing. All 36 source files now pass mypy.
 
 #### Medium Priority
 

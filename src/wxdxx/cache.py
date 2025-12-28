@@ -8,11 +8,12 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 if TYPE_CHECKING:
+    from .models.alert import WFOAlert
     from .models.md import MesoscaleDiscussion
     from .models.observation import Observation
     from .models.outlook import ConvectiveOutlook
     from .models.watch import Watch
-    from .models.wfo import WFOAlert, WFOProduct
+    from .models.wfo import WFOProduct
 
 K = TypeVar("K")
 V = TypeVar("V")

@@ -66,7 +66,7 @@ class NewsTicker(Widget):
         self._known_ids: set[str] = set()
         self._paused: bool = False
         self._update_interval = update_interval or self.DEFAULT_UPDATE_INTERVAL
-        self._scroll_timer: object | None = None
+        self._scroll_timer: object | None = None  # Timer from set_interval
         self._flash_state: bool = True  # Toggles for flashing effect on first-cycle headlines
         self._initial_load_complete: bool = False  # Skip flash for headlines present at startup
 
@@ -422,5 +422,5 @@ class NewsTicker(Widget):
 
         # Cancel existing timer and start new one with updated interval
         if self._scroll_timer is not None:
-            self._scroll_timer.stop()
+            self._scroll_timer.stop()  # type: ignore[attr-defined]
         self._scroll_timer = self.set_interval(interval, self._scroll_tick)

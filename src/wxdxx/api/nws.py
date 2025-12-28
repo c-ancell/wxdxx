@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 import httpx
 
@@ -86,7 +87,8 @@ class NWSClient(BaseAPIClient):
             response = await self._get(f"/offices/{wfo_id.upper()}")
             if response.status_code != 200:
                 return None
-            return response.json()
+            result: dict[str, Any] = response.json()
+            return result
         except httpx.HTTPError:
             return None
 
@@ -111,7 +113,7 @@ class NWSClient(BaseAPIClient):
             props = data.get("properties", {})
             cwa = props.get("cwa", [])
             if cwa and isinstance(cwa, list):
-                wfo = cwa[0].upper()
+                wfo: str = str(cwa[0]).upper()
                 self._zone_wfo_cache[zone_id] = wfo
                 return wfo
         except Exception:
@@ -690,11 +692,13 @@ class NWSClient(BaseAPIClient):
                 val = props.get(field)
                 if val is None or not isinstance(val, dict):
                     return None
-                return val.get("value")
+                raw = val.get("value")
+                return float(raw) if raw is not None else None
 
             # Wind speed comes in m/s, convert to knots
             wind_speed_ms = get_value("windSpeed")
             wind_gust_ms = get_value("windGust")
+            wind_direction = get_value("windDirection")
 
             return Observation(
                 station_id=station_id.upper(),
@@ -703,9 +707,7 @@ class NWSClient(BaseAPIClient):
                 temperature_c=get_value("temperature"),
                 dewpoint_c=get_value("dewpoint"),
                 wind_direction_deg=(
-                    int(get_value("windDirection"))
-                    if get_value("windDirection") is not None
-                    else None
+                    int(wind_direction) if wind_direction is not None else None
                 ),
                 wind_speed_kt=(
                     wind_speed_ms * 1.94384 if wind_speed_ms is not None else None

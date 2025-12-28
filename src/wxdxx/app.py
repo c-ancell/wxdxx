@@ -408,7 +408,7 @@ class WxDXX(App):
         mds_result, watches_result, outlook1, outlook2, outlook3 = results
 
         # Update MDs
-        if isinstance(mds_result, Exception):
+        if isinstance(mds_result, BaseException):
             sidebar.update_mds([], read_items=self._read_items)
             self.notify(f"Failed to fetch MDs: {mds_result}", severity="error")
         else:
@@ -423,7 +423,7 @@ class WxDXX(App):
             sidebar.update_mds(md_data, read_items=self._read_items)
 
         # Update watches
-        if isinstance(watches_result, Exception):
+        if isinstance(watches_result, BaseException):
             sidebar.update_watches([], read_items=self._read_items)
             self.notify(f"Failed to fetch watches: {watches_result}", severity="error")
         else:
@@ -439,7 +439,7 @@ class WxDXX(App):
 
         # Update outlook risk levels
         for day_num, outlook in [(1, outlook1), (2, outlook2), (3, outlook3)]:
-            if outlook is not None and not isinstance(outlook, Exception):
+            if outlook is not None and not isinstance(outlook, BaseException):
                 sidebar.update_outlook_risk(
                     day_num, outlook.max_risk.value if outlook.max_risk else None
                 )
@@ -496,21 +496,24 @@ class WxDXX(App):
                 if category == "md":
                     md = await self.spc_client.get_md(int(identifier))
                     if md:
-                        self._cache.set_md(int(identifier), md, content_text=md.text)
+                        self._cache.set_md(int(identifier), md)
                         if not self._cache.is_empty(cache_key):
                             # Content appeared - trigger sidebar refresh
                             await self._refresh_sidebar_data()
                             return
                 elif category == "watch":
-                    watch = await self.spc_client.get_watch(int(identifier))
-                    if watch:
-                        self._cache.set_watch(
-                            int(identifier), watch, content_text=watch.text
+                    # Get cached watch to determine type for refetch
+                    cached_watch = self._cache.get_watch(int(identifier))
+                    if cached_watch:
+                        watch = await self.spc_client.get_watch(
+                            int(identifier), cached_watch.watch_type
                         )
-                        if not self._cache.is_empty(cache_key):
-                            # Content appeared - trigger sidebar refresh
-                            await self._refresh_sidebar_data()
-                            return
+                        if watch:
+                            self._cache.set_watch(int(identifier), watch)
+                            if not self._cache.is_empty(cache_key):
+                                # Content appeared - trigger sidebar refresh
+                                await self._refresh_sidebar_data()
+                                return
         except asyncio.CancelledError:
             pass  # Task was cancelled, clean exit
         finally:
@@ -609,8 +612,8 @@ class WxDXX(App):
             "EHW": 8,
         }
 
-        def get_priority(h: TickerHeadline) -> int:
-            base_priority = priority_map.get(h.event_type, 10)
+        def get_priority(h: TickerHeadline) -> float:
+            base_priority: float = priority_map.get(h.event_type, 10)
             # SPC watches slightly lower priority than NWS warnings
             if h.source == "spc":
                 base_priority += 0.5
@@ -1153,8 +1156,9 @@ class WxDXX(App):
                 fetch_alerts(),
             )
             # Separate product results from alerts
-            product_results = results[:-1]
-            alerts = results[-1]
+            # Last result is alerts, rest are product lists
+            product_results: list[list[tuple[str, str, str, datetime | None]]] = list(results[:-1])  # type: ignore[arg-type]
+            alerts: list[WFOAlert] = results[-1]  # type: ignore[assignment]
             # Flatten product results
             products_data = [item for sublist in product_results for item in sublist]
             sidebar.update_wfo_products(wfo_id, products_data, alerts, read_items=self._read_items)
