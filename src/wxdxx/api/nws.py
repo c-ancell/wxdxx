@@ -11,6 +11,26 @@ from ..models.observation import Observation
 from ..models.wfo import WFOProduct
 from ..models.zone import ZoneGeometry
 
+# Major US airports (Class B airspace) - prioritized in station listings
+# These are busier airports with more reliable/frequent observations
+MAJOR_AIRPORTS: set[str] = {
+    # Top 30 busiest US airports by passenger traffic
+    "KATL", "KLAX", "KORD", "KDFW", "KDEN",
+    "KJFK", "KSFO", "KSEA", "KLAS", "KMCO",
+    "KEWR", "KPHX", "KMIA", "KIAH", "KBOS",
+    "KMSP", "KFLL", "KDTW", "KPHL", "KLGA",
+    "KBWI", "KSLC", "KDCA", "KSAN", "KTPA",
+    "KAUS", "KBNA", "KMDW", "KHOU", "KSTL",
+    # Additional major metros
+    "KCLT", "KRDU", "KPIT", "KCLE", "KCVG",
+    "KIND", "KMCI", "KMKE", "KOAK", "KPDX",
+    "KSMF", "KSJC", "KSNA", "KONT", "KSAT",
+    "KELP", "KABQ", "KTUS", "KOKC", "KTUL",
+    "KICT", "KOMA", "KDSM", "KMEM", "KLIT",
+    "KJAN", "KMSY", "KBTR", "KJAX", "KPBI",
+    "KRNO", "KCOS", "KBOI",
+}
+
 
 class NWSClient:
     """Client for fetching products from the NWS API."""
@@ -762,14 +782,15 @@ class NWSClient:
         """Get latest observations for stations in specified zones.
 
         Fetches stations for each zone, deduplicates, then fetches observations
-        for up to `limit` unique stations.
+        for up to `limit` unique stations. Prioritizes major airports over
+        regional stations for more reliable observations.
 
         Args:
             zone_ids: List of zone IDs
             limit: Maximum number of observations to return
 
         Returns:
-            List of Observation objects, sorted by station ID.
+            List of Observation objects (major airports first).
         """
         if not zone_ids:
             return []
@@ -779,12 +800,18 @@ class NWSClient:
             *[self.get_zone_stations(zone_id) for zone_id in zone_ids]
         )
 
-        # Deduplicate and limit
+        # Deduplicate
         all_stations: set[str] = set()
         for station_list in station_lists:
             all_stations.update(station_list)
 
-        stations_to_fetch = sorted(list(all_stations))[:limit]
+        # Sort by importance: major airports first, then alphabetically
+        def station_priority(station_id: str) -> tuple[int, str]:
+            # Priority 0 for major airports, 1 for others
+            is_major = 0 if station_id in MAJOR_AIRPORTS else 1
+            return (is_major, station_id)
+
+        stations_to_fetch = sorted(all_stations, key=station_priority)[:limit]
 
         if not stations_to_fetch:
             return []

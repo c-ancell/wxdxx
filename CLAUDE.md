@@ -152,7 +152,7 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 - ~~Zone map: Color affected zones to match alert color~~: ✅ Done - Zones now colored by event type (TOR=red, SVR=yellow, etc.)
 - ~~Zone map: Render major cities as reference points~~: ✅ Done - Major US cities shown as cyan markers with legend
 - ~~News ticker: Alert updates should display "UPDATE" instead of "NEW"~~: ✅ Done - Updates now show "UPDATE" prefix
-- Nearby stations in alerts should list in order of importance (major airports > regional stations)
+- ~~Nearby stations in alerts should list in order of importance~~: ✅ Done - Major airports prioritized over regional stations
 
 ### Bugs
 - Alert sidebar click shows "Error try refreshing": Sometimes an alert appears in sidebar and clicking on it shows an error message. Normally a refresh works, but a recent occurrence crashed the UI. Needs investigation.
