@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.8] - 2025-12-28
+
+### Fixed
+
+- WFO alerts now re-fetch from API on cache miss instead of showing error (#17)
+- Snow Squall Warnings now appear in news ticker (#16)
+- Alerts no longer show "NWS" as WFO - using senderCode for attribution (#12)
+- WFO alerts no longer incorrectly deduplicated when WFO lookup fails (#15)
+
 ## [0.8.7] - 2025-12-28
 
 ### Added
