@@ -31,6 +31,15 @@ class VimListView(ListView):
         for _ in range(10):
             self.action_cursor_up()
 
+    def action_first(self) -> None:
+        """Move cursor to the first item."""
+        self.index = 0
+
+    def action_last(self) -> None:
+        """Move cursor to the last item."""
+        if self._nodes:
+            self.index = len(self._nodes) - 1
+
 
 def format_time_remaining(seconds: float) -> str:
     """Format remaining time as 'Xh Ym' or 'Xm'."""

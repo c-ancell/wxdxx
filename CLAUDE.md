@@ -156,6 +156,7 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 
 ### Bugs
 - Alert sidebar click shows "Error try refreshing": Sometimes an alert appears in sidebar and clicking on it shows an error message. Normally a refresh works, but a recent occurrence crashed the UI. Needs investigation.
+- ~~Sidebar 'g' and 'G' hotkeys not working~~: ✅ Fixed - Added action_first and action_last methods to VimListView
 
 ### Larger effort
 - Make sidebar sections collapsible
