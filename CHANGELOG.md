@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2025-12-27
+
+### Added
+
+- METAR lookup feature: Press 'O' to look up current conditions at any ICAO station
+- Nearby stations in alerts: Bottom of alert text shows current conditions from up to 10 stations in affected zones
+- Major airport priority: Nearby stations list major airports (KORD, KDFW, etc.) before regional stations
+- Zone map colors: Affected zones now colored by alert type (TOR=red, SVR=yellow, FFW=green, etc.)
+- City markers on zone maps: Major US cities shown as cyan reference points with legend
+- UPDATE ticker prefix: Alert updates from NWS now show "UPDATE" instead of "NEW" flash
+
+### Fixed
+
+- City markers now display over alert fills on zone maps (priority-based rendering)
+
 ## [0.7.0] - 2025-12-27
 
 ### Added
