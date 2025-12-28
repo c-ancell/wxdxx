@@ -641,9 +641,26 @@ class NWSClient(BaseAPIClient):
                 raw = val.get("value")
                 return float(raw) if raw is not None else None
 
-            # Wind speed comes in m/s, convert to knots
-            wind_speed_ms = get_value("windSpeed")
-            wind_gust_ms = get_value("windGust")
+            def get_wind_kt(field: str) -> float | None:
+                """Extract wind speed and convert to knots based on unitCode."""
+                val = props.get(field)
+                if val is None or not isinstance(val, dict):
+                    return None
+                raw = val.get("value")
+                if raw is None:
+                    return None
+                value = float(raw)
+                unit_code = val.get("unitCode", "")
+                # NWS API can return wind in m/s or knots
+                # unit:m_s-1 = meters per second, wmoUnit:km_h-1 = km/h
+                if "m_s-1" in unit_code:
+                    return value * 1.94384  # m/s to knots
+                elif "km_h-1" in unit_code:
+                    return value * 0.539957  # km/h to knots
+                else:
+                    # Assume already in knots (wmoUnit:kt) or unknown
+                    return value
+
             wind_direction = get_value("windDirection")
 
             return Observation(
@@ -655,12 +672,8 @@ class NWSClient(BaseAPIClient):
                 wind_direction_deg=(
                     int(wind_direction) if wind_direction is not None else None
                 ),
-                wind_speed_kt=(
-                    wind_speed_ms * 1.94384 if wind_speed_ms is not None else None
-                ),
-                wind_gust_kt=(
-                    wind_gust_ms * 1.94384 if wind_gust_ms is not None else None
-                ),
+                wind_speed_kt=get_wind_kt("windSpeed"),
+                wind_gust_kt=get_wind_kt("windGust"),
                 barometric_pressure_hpa=get_value("barometricPressure"),
                 visibility_m=get_value("visibility"),
                 relative_humidity_pct=get_value("relativeHumidity"),
