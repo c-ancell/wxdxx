@@ -2,14 +2,13 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from .base import BaseProduct
 
 
-class MesoscaleDiscussion(BaseModel):
+class MesoscaleDiscussion(BaseProduct):
     """A Mesoscale Discussion from SPC."""
 
     number: int
-    issued: datetime | None = None
     expires: datetime | None = None
     text: str
     concerning: str | None = None  # Brief description of what the MD is about

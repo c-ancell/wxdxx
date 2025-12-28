@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from .base import BaseProduct
 
 
 # NWS product type abbreviations and their meanings
@@ -30,13 +30,12 @@ PRODUCT_ABBREVIATIONS = {
 DEFAULT_PRODUCT_TYPES = ["AFD", "HWO", "SPS", "NOW", "ZFP"]
 
 
-class WFOProduct(BaseModel):
+class WFOProduct(BaseProduct):
     """A text product from a WFO."""
 
     id: str  # Unique product ID from NWS API
     wfo: str  # WFO identifier (e.g., "OUN")
     product_type: str  # Product type code (e.g., "AFD")
-    issued: datetime | None = None
     expires: datetime | None = None  # For products with expiry (e.g., SPS)
     text: str | None = None  # May be None until loaded
     name: str | None = None  # Product name from API

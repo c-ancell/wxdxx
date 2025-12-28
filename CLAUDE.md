@@ -412,17 +412,7 @@ logger.error("Failed to parse response", exc_info=True)
 
 #### High Priority
 
-**4. Extract BaseProduct Model**
-```python
-class BaseProduct(BaseModel):
-    id: str
-    issued: datetime | None = None
-    text: str = ""
-
-    @property
-    def title(self) -> str:
-        raise NotImplementedError
-```
+**4. ~~Extract BaseProduct Model~~**: ✅ Done - Created `models/base.py` with `BaseProduct(BaseModel)` containing `issued: datetime | None` and abstract `title` property. All product models (MesoscaleDiscussion, Watch, ConvectiveOutlook, WFOProduct, WFOAlert) now inherit from it. Kept minimal (no forced `id` or `text` fields) since models have varying identifier types and WFOAlert computes text dynamically.
 
 **5. Refactor Sidebar Update Methods**
 Extract generic `_update_category(category: str, items: list, item_builder: Callable)`.

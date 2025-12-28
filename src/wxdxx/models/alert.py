@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
+from .base import BaseProduct
 
 
 class AlertSeverity(str, Enum):
@@ -26,7 +26,7 @@ class AlertUrgency(str, Enum):
     UNKNOWN = "Unknown"
 
 
-class WFOAlert(BaseModel):
+class WFOAlert(BaseProduct):
     """An active weather alert from NWS."""
 
     id: str  # Alert ID from NWS API

@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
+from .base import BaseProduct
 
 
 class WatchType(str, Enum):
@@ -13,12 +13,11 @@ class WatchType(str, Enum):
     SEVERE_THUNDERSTORM = "severe_thunderstorm"
 
 
-class Watch(BaseModel):
+class Watch(BaseProduct):
     """A severe weather watch from SPC."""
 
     number: int
     watch_type: WatchType
-    issued: datetime | None = None
     expires: datetime | None = None
     text: str
     affected_states: list[str] = []

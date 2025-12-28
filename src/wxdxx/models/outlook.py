@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
+from .base import BaseProduct
 
 
 class OutlookDay(str, Enum):
@@ -34,12 +34,11 @@ class RiskLevel(str, Enum):
     HIGH = "HIGH"  # High
 
 
-class ConvectiveOutlook(BaseModel):
+class ConvectiveOutlook(BaseProduct):
     """A convective outlook product from SPC."""
 
     day: OutlookDay
     outlook_type: OutlookType
-    issued: datetime | None = None
     valid_start: datetime | None = None
     valid_end: datetime | None = None
     next_scheduled: datetime | None = None
