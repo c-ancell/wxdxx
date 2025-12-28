@@ -26,6 +26,7 @@ from .models.outlook import ConvectiveOutlook, OutlookDay
 from .models.watch import Watch
 from .models.wfo import DEFAULT_PRODUCT_TYPES, WFOProduct
 from .models.observation import Observation
+from .utils.datetime import format_countdown
 from .widgets.help_screen import HelpScreen
 from .widgets.metar_details_screen import METARDetailsScreen
 from .widgets.metar_input import METARInputDialog
@@ -36,17 +37,6 @@ from .widgets.sidebar import Sidebar
 from .widgets.wfo_details_screen import WFODetailsScreen
 from .widgets.wfo_input import WFODialogMode, WFOInputDialog
 from .widgets.zone_map import ZoneMap
-
-
-def format_timedelta(td_seconds: float) -> str:
-    """Format seconds into a human-readable duration string (minutes resolution)."""
-    abs_seconds = abs(int(td_seconds))
-    hours, remainder = divmod(abs_seconds, 3600)
-    minutes, _ = divmod(remainder, 60)
-    if hours > 0:
-        return f"{hours}h {minutes}m"
-    else:
-        return f"{minutes}m"
 
 
 class ClockWidget(Static):
@@ -81,7 +71,7 @@ class ClockWidget(Static):
             if since_refresh < 60:
                 parts.append("Refreshed: <1m ago")
             else:
-                parts.append(f"Refreshed: {format_timedelta(since_refresh)} ago")
+                parts.append(f"Refreshed: {format_countdown(since_refresh)} ago")
 
         # Show WFO loading indicator
         if hasattr(app, "_loading_wfos") and app._loading_wfos:
@@ -93,7 +83,7 @@ class ClockWidget(Static):
             if issued.tzinfo is None:
                 issued = issued.replace(tzinfo=timezone.utc)
             since = (utc_now - issued).total_seconds()
-            parts.append(f"Issued: {format_timedelta(since)} ago")
+            parts.append(f"Issued: {format_countdown(since)} ago")
 
         if hasattr(app, "_current_product_expires") and app._current_product_expires:
             expires = app._current_product_expires
@@ -116,9 +106,9 @@ class ClockWidget(Static):
             else:
                 # Show countdown for MDs/Watches
                 if until > 0:
-                    parts.append(f"Expires: in {format_timedelta(until)}")
+                    parts.append(f"Expires: in {format_countdown(until)}")
                 else:
-                    parts.append(f"Expired: {format_timedelta(-until)} ago")
+                    parts.append(f"Expired: {format_countdown(-until)} ago")
 
         if hasattr(app, "_current_product_next_scheduled") and app._current_product_next_scheduled:
             next_sched = app._current_product_next_scheduled
@@ -126,7 +116,7 @@ class ClockWidget(Static):
                 next_sched = next_sched.replace(tzinfo=timezone.utc)
             until_next = (next_sched - utc_now).total_seconds()
             if until_next > 0:
-                parts.append(f"Next: in {format_timedelta(until_next)}")
+                parts.append(f"Next: in {format_countdown(until_next)}")
 
         parts.append(clock_str)
         new_display = " | ".join(parts)

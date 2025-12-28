@@ -2,13 +2,13 @@
 
 import asyncio
 import logging
-import re
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
 from .base import BaseAPIClient
+from ..utils.datetime import parse_iso_datetime, parse_ugc_expiry
 
 logger = logging.getLogger(__name__)
 from ..models.alert import AlertSeverity, AlertUrgency, WFOAlert
@@ -311,7 +311,7 @@ class NWSClient(BaseAPIClient):
                     id=product_id,
                     wfo=wfo_id.upper(),
                     product_type=product_type.upper(),
-                    issued=self._parse_datetime(item.get("issuanceTime")),
+                    issued=parse_iso_datetime(item.get("issuanceTime")),
                     text=None,  # Lazy-loaded
                     name=item.get("productName"),
                 )
@@ -324,7 +324,7 @@ class NWSClient(BaseAPIClient):
                 try:
                     full_product = await self.get_product(product.id)
                     product.text = full_product.text
-                    product.expires = self._parse_ugc_expiry(full_product.text or "")
+                    product.expires = parse_ugc_expiry(full_product.text or "")
                 except Exception as e:
                     logger.warning("Failed to fetch SPS text for %s: %s", product.id, e)
 
@@ -343,7 +343,7 @@ class NWSClient(BaseAPIClient):
             id=product_id,
             wfo=data.get("issuingOffice", "").split("/")[-1],
             product_type=data.get("productCode", ""),
-            issued=self._parse_datetime(data.get("issuanceTime")),
+            issued=parse_iso_datetime(data.get("issuanceTime")),
             text=data.get("productText", ""),
             name=data.get("productName"),
         )
@@ -409,7 +409,7 @@ class NWSClient(BaseAPIClient):
                 continue
 
             # Skip expired alerts early (before deduplication)
-            expires = self._parse_datetime(props.get("expires"))
+            expires = parse_iso_datetime(props.get("expires"))
             if expires and expires < now:
                 continue
 
@@ -476,8 +476,8 @@ class NWSClient(BaseAPIClient):
                     instruction=props.get("instruction"),
                     severity=severity,
                     urgency=urgency,
-                    effective=self._parse_datetime(props.get("effective")),
-                    expires=self._parse_datetime(props.get("expires")),
+                    effective=parse_iso_datetime(props.get("effective")),
+                    expires=parse_iso_datetime(props.get("expires")),
                     area_desc=props.get("areaDesc"),
                     affected_zones=zone_ids,
                     message_type=props.get("messageType", "Alert"),
@@ -574,8 +574,8 @@ class NWSClient(BaseAPIClient):
                         instruction=props.get("instruction"),
                         severity=severity,
                         urgency=urgency,
-                        effective=self._parse_datetime(props.get("effective")),
-                        expires=self._parse_datetime(props.get("expires")),
+                        effective=parse_iso_datetime(props.get("effective")),
+                        expires=parse_iso_datetime(props.get("expires")),
                         area_desc=props.get("areaDesc"),
                         affected_zones=zone_ids,
                     )
@@ -583,73 +583,6 @@ class NWSClient(BaseAPIClient):
 
         logger.debug("Returning %d alerts for zone query", len(all_alerts))
         return all_alerts
-
-    def _parse_datetime(self, dt_str: str | None) -> datetime | None:
-        """Parse ISO datetime string."""
-        if not dt_str:
-            return None
-        try:
-            return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-
-    def _parse_ugc_expiry(self, text: str) -> datetime | None:
-        """Extract expiry datetime from UGC header in product text.
-
-        UGC (Universal Geographic Code) headers contain zone codes and an expiry
-        time in DDHHMM format (day of month, hour, minute in UTC).
-
-        Examples:
-            CAZ103-104-106-261800-     -> Day 26, 18:00 UTC
-            TXZ001-002-003-
-            261800-                    -> Day 26, 18:00 UTC (multi-line)
-
-        Args:
-            text: Full product text containing UGC header
-
-        Returns:
-            Expiry datetime in UTC, or None if parsing fails
-        """
-        if not text:
-            return None
-
-        # UGC expiry is a 6-digit number followed by a dash at end of line
-        # It appears in the first few lines of the product
-        # Pattern: look for DDHHMM- where DD is day, HH is hour, MM is minute
-        match = re.search(r"(\d{6})-\s*$", text[:500], re.MULTILINE)
-        if not match:
-            return None
-
-        try:
-            ddhhmm = match.group(1)
-            day = int(ddhhmm[:2])
-            hour = int(ddhhmm[2:4])
-            minute = int(ddhhmm[4:6])
-
-            # Build datetime using current year/month
-            # Don't try to roll over months - if the expiry is in the past,
-            # that's correct (the product is expired). The filtering logic
-            # in app.py will handle removing expired products.
-            now = datetime.now(timezone.utc)
-
-            # Handle edge case: if we're on day 1-2 and expiry is day 30-31,
-            # it's likely from the previous month (product issued end of last month)
-            if now.day <= 2 and day >= 28:
-                # Roll back to previous month
-                if now.month == 1:
-                    expiry = datetime(now.year - 1, 12, day, hour, minute, 0, tzinfo=timezone.utc)
-                else:
-                    # Need to handle months with different day counts
-                    try:
-                        expiry = datetime(now.year, now.month - 1, day, hour, minute, 0, tzinfo=timezone.utc)
-                    except ValueError:
-                        return None  # Day doesn't exist in previous month
-            else:
-                expiry = now.replace(day=day, hour=hour, minute=minute, second=0, microsecond=0)
-
-            return expiry
-        except (ValueError, IndexError):
-            return None
 
     # ---------- Observation/METAR methods ----------
 
@@ -703,7 +636,7 @@ class NWSClient(BaseAPIClient):
             return Observation(
                 station_id=station_id.upper(),
                 station_name=props.get("textDescription"),
-                timestamp=self._parse_datetime(props.get("timestamp")),
+                timestamp=parse_iso_datetime(props.get("timestamp")),
                 temperature_c=get_value("temperature"),
                 dewpoint_c=get_value("dewpoint"),
                 wind_direction_deg=(

@@ -14,9 +14,12 @@ src/wxdxx/
 ├── cache.py            # TTL-based in-memory cache
 ├── config.py           # Configuration model and persistence (TOML)
 ├── api/
+│   ├── base.py         # BaseAPIClient with shared retry/rate limiting
 │   ├── spc.py          # SPC website scraper (HTML parsing)
 │   └── nws.py          # NWS API client (api.weather.gov)
 ├── models/             # Pydantic models (outlook, md, watch, wfo)
+├── utils/
+│   └── datetime.py     # Datetime parsing and formatting utilities
 ├── widgets/
 │   ├── sidebar.py      # Navigation sidebar with categories
 │   ├── product_view.py # Scrollable content display
@@ -367,48 +370,11 @@ if elapsed > 300:
 
 #### Critical (Do Before Adding Features)
 
-**1. Centralize Event Color Mapping**
-Create `src/wxdxx/colors.py`:
-```python
-from enum import Enum
+**1. ~~Centralize Event Color Mapping~~**: ✅ Done - Created `src/wxdxx/colors.py` with `EventType` enum and `EVENT_COLORS` mapping. Added `get_event_color()`, `get_event_css_class()`, and `generate_event_css()` functions. Sidebar, news ticker, and zone map now use centralized color definitions.
 
-class EventType(Enum):
-    TORNADO_WARNING = "tor"
-    SEVERE_THUNDERSTORM_WARNING = "svr"
-    # ...
+**2. ~~Consolidate API Client Base~~**: ✅ Done - Created `src/wxdxx/api/base.py` with `BaseAPIClient` class containing shared retry/backoff logic, semaphore-based rate limiting, and consistent error handling. SPC and NWS clients now inherit from this base class.
 
-EVENT_COLORS = {
-    EventType.TORNADO_WARNING: {"bg": "#ff0000", "fg": "#ffffff"},
-    # ...
-}
-
-def get_event_color(event_code: str) -> tuple[str, str]:
-    """Returns (background, foreground) color for event type."""
-```
-This eliminates 400+ lines of duplicate CSS and 4 separate mapping functions.
-
-**2. Consolidate API Client Base**
-Create `src/wxdxx/api/base.py`:
-```python
-class BaseAPIClient:
-    def __init__(self, base_url: str, max_concurrent: int):
-        self._semaphore = asyncio.Semaphore(max_concurrent)
-        self._client = httpx.AsyncClient(...)
-
-    async def _get(self, url: str) -> httpx.Response:
-        """Shared retry/backoff logic."""
-```
-SPC and NWS clients inherit from this.
-
-**3. Add Logging**
-```python
-import logging
-logger = logging.getLogger(__name__)
-
-# At module level in each file
-logger.debug("Fetching MD %s", md_number)
-logger.error("Failed to parse response", exc_info=True)
-```
+**3. ~~Add Logging~~**: ✅ Done - Added file-based logging infrastructure. Logs written to `~/.local/state/wxdxx/wxdxx.log` with rotation. All API clients and major app operations now log debug/info/error messages.
 
 #### High Priority
 
@@ -422,12 +388,7 @@ logger.error("Failed to parse response", exc_info=True)
 
 #### Medium Priority
 
-**8. Extract Datetime Parsing Utilities**
-Create `src/wxdxx/utils/datetime.py` for:
-- `parse_local_timestamp()`
-- `parse_zulu_time()`
-- `parse_ugc_expiry()`
-- `format_countdown()`
+**8. ~~Extract Datetime Parsing Utilities~~**: ✅ Done - Created `src/wxdxx/utils/datetime.py` with consolidated datetime parsing and formatting functions: `parse_zulu_time()`, `parse_local_timestamp()`, `parse_iso_datetime()`, `parse_ugc_expiry()`, `parse_valid_line()`, `format_countdown()`, and `format_duration()`. Also includes `US_TIMEZONE_OFFSETS` and `MONTH_NAMES` constants. Refactored `api/spc.py`, `api/nws.py`, `widgets/sidebar.py`, and `app.py` to use these utilities, removing ~200 lines of duplicate code.
 
 **9. Generate CSS from Color Registry**
 Instead of 400 lines of hand-written CSS, generate from `EVENT_COLORS`:

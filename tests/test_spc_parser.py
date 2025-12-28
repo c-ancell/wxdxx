@@ -7,6 +7,7 @@ import pytest
 
 from wxdxx.api.spc import SPCClient
 from wxdxx.models.outlook import RiskLevel
+from wxdxx.utils.datetime import parse_local_timestamp, parse_valid_line, parse_zulu_time
 
 
 class TestSPCParser:
@@ -81,12 +82,12 @@ class TestSPCParser:
 
         assert md_numbers == [2847, 2846, 2845]
 
-    def test_parse_valid_line(self, client: SPCClient) -> None:
+    def test_parse_valid_line(self) -> None:
         """Test parsing VALID timestamp line."""
         text = "VALID 251630Z - 251830Z"
         ref_date = datetime(2024, 12, 25, 12, 0, tzinfo=timezone.utc)
 
-        start, end = client._parse_valid_line(text, ref_date)
+        start, end = parse_valid_line(text, ref_date)
 
         assert start is not None
         assert end is not None
@@ -97,10 +98,10 @@ class TestSPCParser:
         assert end.hour == 18
         assert end.minute == 30
 
-    def test_parse_local_timestamp(self, client: SPCClient) -> None:
+    def test_parse_local_timestamp(self) -> None:
         """Test parsing local timestamp from product header."""
         text = "1030 AM CST Wed Dec 25 2024"
-        result = client._parse_local_timestamp(text)
+        result = parse_local_timestamp(text)
 
         assert result is not None
         # CST is UTC-6, so 10:30 AM CST = 16:30 UTC
@@ -110,21 +111,21 @@ class TestSPCParser:
         assert result.month == 12
         assert result.year == 2024
 
-    def test_parse_local_timestamp_pm(self, client: SPCClient) -> None:
+    def test_parse_local_timestamp_pm(self) -> None:
         """Test parsing PM timestamp."""
         text = "505 PM CST Thu Dec 18 2025"
-        result = client._parse_local_timestamp(text)
+        result = parse_local_timestamp(text)
 
         assert result is not None
         # 5:05 PM CST = 23:05 UTC
         assert result.hour == 23
         assert result.minute == 5
 
-    def test_parse_zulu_time(self, client: SPCClient) -> None:
+    def test_parse_zulu_time(self) -> None:
         """Test parsing DDHHMMZ format."""
         ref_date = datetime(2024, 12, 25, 12, 0, tzinfo=timezone.utc)
 
-        result = client._parse_zulu_time("261200", ref_date)
+        result = parse_zulu_time("261200", ref_date)
 
         assert result is not None
         assert result.day == 26

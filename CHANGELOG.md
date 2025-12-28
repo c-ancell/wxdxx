@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.7] - 2025-12-28
+
+### Added
+
+- New `utils/datetime.py` module with consolidated datetime parsing utilities
+
+### Changed
+
+- Refactored datetime parsing to use shared utilities (~200 lines removed)
+- `api/spc.py` and `api/nws.py` now use centralized parsing functions
+- `widgets/sidebar.py` and `app.py` now use `format_countdown()` from utils
+
 ## [0.8.6] - 2025-12-28
 
 ### Added

@@ -14,6 +14,7 @@ from wxdxx.colors import (
     get_md_css_class,
     get_wfo_css_class,
 )
+from wxdxx.utils.datetime import format_countdown
 
 
 class VimListView(ListView):
@@ -46,15 +47,6 @@ class VimListView(ListView):
         """Move cursor to the last item."""
         if self._nodes:
             self.index = len(self._nodes) - 1
-
-
-def format_time_remaining(seconds: float) -> str:
-    """Format remaining time as 'Xh Ym' or 'Xm'."""
-    hours, remainder = divmod(int(seconds), 3600)
-    minutes, _ = divmod(remainder, 60)
-    if hours > 0:
-        return f"{hours}h {minutes}m"
-    return f"{minutes}m"
 
 
 class SidebarItem(ListItem):
@@ -91,7 +83,7 @@ class SidebarItem(ListItem):
         now = datetime.now(timezone.utc)
         remaining = (self.expires - now).total_seconds()
         if remaining > 0:
-            return f"{self.base_label} ({format_time_remaining(remaining)})"
+            return f"{self.base_label} ({format_countdown(remaining)})"
         return f"{self.base_label} (expired)"
 
     def _get_display_text(self) -> str:
