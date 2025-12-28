@@ -414,8 +414,7 @@ logger.error("Failed to parse response", exc_info=True)
 
 **4. ~~Extract BaseProduct Model~~**: ✅ Done - Created `models/base.py` with `BaseProduct(BaseModel)` containing `issued: datetime | None` and abstract `title` property. All product models (MesoscaleDiscussion, Watch, ConvectiveOutlook, WFOProduct, WFOAlert) now inherit from it. Kept minimal (no forced `id` or `text` fields) since models have varying identifier types and WFOAlert computes text dynamically.
 
-**5. Refactor Sidebar Update Methods**
-Extract generic `_update_category(category: str, items: list, item_builder: Callable)`.
+**5. ~~Refactor Sidebar Update Methods~~**: ✅ Done - Extracted `_update_category_items()` helper method that handles clearing old items, removing placeholders, and mounting new items. `update_mds()` and `update_watches()` now use this helper, reducing ~60 lines of duplicate code. Also extracted `_get_watch_severity_class()` for watch styling logic.
 
 **6. Add Cache Unit Tests**
 ProductCache has complex logic (LRU eviction, pattern invalidation, TTL) but zero tests.

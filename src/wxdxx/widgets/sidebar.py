@@ -228,6 +228,64 @@ class Sidebar(Vertical):
         """Get CSS class based on MD watch probability."""
         return get_md_css_class(watch_prob)
 
+    def _update_category_items(
+        self,
+        category_id: str,
+        item_class: str,
+        placeholder_id: str | None,
+        empty_label: str,
+        items: list[dict],
+        read_items: set[str],
+        indent: int = 1,
+    ) -> None:
+        """Generic helper to update items in a sidebar category.
+
+        Args:
+            category_id: DOM ID of the category header (e.g., "cat-mds")
+            item_class: CSS class for items in this category (e.g., "md-item")
+            placeholder_id: DOM ID of the placeholder to remove, or None
+            empty_label: Label to show when there are no items
+            items: List of dicts with keys: label, item_id, severity_class, expires
+            read_items: Set of item_ids that have been read
+            indent: Indentation level for items
+        """
+        listview = self.query_one("#sidebar-list", VimListView)
+
+        # Remove existing items
+        for item in list(listview.query(f".{item_class}")):
+            item.remove()
+
+        # Remove placeholder if it exists
+        if placeholder_id:
+            try:
+                placeholder = self.query_one(f"#{placeholder_id}")
+                placeholder.remove()
+            except Exception:
+                pass
+
+        # Find category header
+        cat_header = self.query_one(f"#{category_id}")
+
+        if not items:
+            # No items - show empty message
+            item = SidebarItem(empty_label, f"{item_class}-none", indent=indent)
+            item.add_class(item_class)
+            listview.mount(item, after=cat_header)
+        else:
+            # Add items in reverse so they appear in order
+            for item_data in reversed(items):
+                item_id = item_data["item_id"]
+                item = SidebarItem(
+                    item_data["label"],
+                    item_id,
+                    indent=indent,
+                    severity_class=item_data.get("severity_class"),
+                    expires=item_data.get("expires"),
+                    unread=item_id not in read_items,
+                )
+                item.add_class(item_class)
+                listview.mount(item, after=cat_header)
+
     def update_mds(
         self,
         mds: list[tuple[int, str | None, int | None, datetime | None]],
@@ -239,44 +297,33 @@ class Sidebar(Vertical):
             mds: List of (md_number, concerning_text, watch_probability, expires) tuples
             read_items: Set of item_ids that have been read (won't show unread indicator)
         """
-        read_items = read_items or set()
-        listview = self.query_one("#sidebar-list", VimListView)
+        # Convert tuples to item dicts
+        items = [
+            {
+                "label": f"MD {md_num}",
+                "item_id": f"md-{md_num}",
+                "severity_class": self._get_md_severity_class(watch_prob),
+                "expires": expires,
+            }
+            for md_num, _concerning, watch_prob, expires in mds
+        ]
 
-        # Remove existing MD items (placeholder or previous items)
-        for item in list(listview.query(".md-item")):
-            item.remove()
+        self._update_category_items(
+            category_id="cat-mds",
+            item_class="md-item",
+            placeholder_id="mds-placeholder",
+            empty_label="None current",
+            items=items,
+            read_items=read_items or set(),
+        )
 
-        # Find the placeholder and remove it if it exists
-        try:
-            placeholder = self.query_one("#mds-placeholder")
-            placeholder.remove()
-        except Exception:
-            pass
-
-        # Find the MDs category header to insert after
-        cat_mds = self.query_one("#cat-mds")
-
-        if not mds:
-            # No current MDs - don't set an ID, use class for cleanup
-            item = SidebarItem("None current", "mds-none", indent=1)
-            item.add_class("md-item")
-            listview.mount(item, after=cat_mds)
-        else:
-            # Add each MD as a sidebar item (in reverse so they appear in order)
-            for md_num, concerning, watch_prob, expires in reversed(mds):
-                base_label = f"MD {md_num}"
-                item_id = f"md-{md_num}"
-                severity_class = self._get_md_severity_class(watch_prob)
-                item = SidebarItem(
-                    base_label,
-                    item_id,
-                    indent=1,
-                    severity_class=severity_class,
-                    expires=expires,
-                    unread=item_id not in read_items,
-                )
-                item.add_class("md-item")
-                listview.mount(item, after=cat_mds)
+    def _get_watch_severity_class(self, watch_type: str, is_pds: bool) -> str:
+        """Get CSS class for watch based on type and PDS status."""
+        if is_pds:
+            return "watch-pds"
+        elif watch_type == "tornado":
+            return "watch-tor"
+        return "watch-svr"
 
     def update_watches(
         self,
@@ -290,54 +337,26 @@ class Sidebar(Vertical):
                     watch_type is "tornado" or "severe_thunderstorm"
             read_items: Set of item_ids that have been read (won't show unread indicator)
         """
-        read_items = read_items or set()
-        listview = self.query_one("#sidebar-list", VimListView)
+        # Convert tuples to item dicts
+        items = []
+        for watch_num, watch_type, is_pds, expires in watches:
+            prefix = "TOR" if watch_type == "tornado" else "SVR"
+            pds = " PDS" if is_pds else ""
+            items.append({
+                "label": f"{prefix} {watch_num}{pds}",
+                "item_id": f"watch-{watch_num}",
+                "severity_class": self._get_watch_severity_class(watch_type, is_pds),
+                "expires": expires,
+            })
 
-        # Remove existing watch items
-        for item in list(listview.query(".watch-item")):
-            item.remove()
-
-        # Find the placeholder and remove it if it exists
-        try:
-            placeholder = self.query_one("#watches-placeholder")
-            placeholder.remove()
-        except Exception:
-            pass
-
-        # Find the Watches category header to insert after
-        cat_watches = self.query_one("#cat-watches")
-
-        if not watches:
-            # No current watches - don't set an ID, use class for cleanup
-            item = SidebarItem("None current", "watches-none", indent=1)
-            item.add_class("watch-item")
-            listview.mount(item, after=cat_watches)
-        else:
-            # Add each watch as a sidebar item (in reverse so they appear in order)
-            for watch_num, watch_type, is_pds, expires in reversed(watches):
-                prefix = "TOR" if watch_type == "tornado" else "SVR"
-                pds = " PDS" if is_pds else ""
-                base_label = f"{prefix} {watch_num}{pds}"
-                item_id = f"watch-{watch_num}"
-
-                # Determine severity class (PDS takes priority)
-                if is_pds:
-                    severity_class = "watch-pds"
-                elif watch_type == "tornado":
-                    severity_class = "watch-tor"
-                else:
-                    severity_class = "watch-svr"
-
-                item = SidebarItem(
-                    base_label,
-                    item_id,
-                    indent=1,
-                    severity_class=severity_class,
-                    expires=expires,
-                    unread=item_id not in read_items,
-                )
-                item.add_class("watch-item")
-                listview.mount(item, after=cat_watches)
+        self._update_category_items(
+            category_id="cat-watches",
+            item_class="watch-item",
+            placeholder_id="watches-placeholder",
+            empty_label="None current",
+            items=items,
+            read_items=read_items or set(),
+        )
 
     def add_wfo(self, wfo_id: str) -> None:
         """Add a new WFO section to the sidebar."""
