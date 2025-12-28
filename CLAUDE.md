@@ -416,8 +416,7 @@ logger.error("Failed to parse response", exc_info=True)
 
 **5. ~~Refactor Sidebar Update Methods~~**: ✅ Done - Extracted `_update_category_items()` helper method that handles clearing old items, removing placeholders, and mounting new items. `update_mds()` and `update_watches()` now use this helper, reducing ~60 lines of duplicate code. Also extracted `_get_watch_severity_class()` for watch styling logic.
 
-**6. Add Cache Unit Tests**
-ProductCache has complex logic (LRU eviction, pattern invalidation, TTL) but zero tests.
+**6. ~~Add Cache Unit Tests~~**: ✅ Done - Added 44 tests in `tests/test_cache.py` covering TTLCache (14 tests) and ProductCache (30 tests). Tests cover: TTL expiration, LRU eviction, targeted invalidation patterns, empty content detection, staleness tracking, and statistics.
 
 **7. Enable mypy**
 Add to CI/pre-commit. Start with `--ignore-missing-imports` and tighten over time.
