@@ -1,11 +1,16 @@
 """Main WxDXX application."""
 
 import asyncio
+import logging
 import re
 import time
 from datetime import datetime, timezone
 
 from textual.app import App, ComposeResult
+
+from .logging_config import setup_logging
+
+logger = logging.getLogger(__name__)
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Header, Static
@@ -277,6 +282,7 @@ class WxDXX(App):
 
     async def on_mount(self) -> None:
         """Initialize the app by fetching active products and start auto-refresh."""
+        logger.info("App mounted, tracked WFOs: %s", self._tracked_wfos)
         # Restore saved WFOs to sidebar first (sync operation)
         sidebar = self.query_one(Sidebar)
         for wfo_id in self._tracked_wfos:
@@ -316,6 +322,7 @@ class WxDXX(App):
 
         self._is_refreshing = True
         self._update_clock_display()
+        logger.debug("Starting data refresh")
         try:
             # Build list of all refresh tasks
             refresh_tasks = [
@@ -336,6 +343,9 @@ class WxDXX(App):
 
             # Record successful refresh time
             self._last_refresh_time = datetime.now(timezone.utc)
+            logger.debug("Data refresh completed in %.2fs", time.monotonic() - start_time)
+        except Exception as e:
+            logger.error("Error during data refresh: %s", e, exc_info=True)
         finally:
             self._is_refreshing = False
             self._update_clock_display()
@@ -1276,8 +1286,11 @@ class WxDXX(App):
 
 def main() -> None:
     """Entry point for WxDXX."""
+    setup_logging()
+    logger.info("Starting WxDXX")
     app = WxDXX()
     app.run()
+    logger.info("WxDXX shutdown complete")
 
 
 if __name__ == "__main__":

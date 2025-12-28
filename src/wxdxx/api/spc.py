@@ -1,12 +1,15 @@
 """SPC API client for fetching weather products."""
 
 import asyncio
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 
 import httpx
 
 from .base import BaseAPIClient
+
+logger = logging.getLogger(__name__)
 
 # US timezone offsets (hours from UTC)
 # Standard time offsets
@@ -43,6 +46,7 @@ class SPCClient(BaseAPIClient):
         """Fetch a convective outlook for the specified day."""
         day_num = day.value.replace("day", "")
         url = f"/products/outlook/day{day_num}otlk.html"
+        logger.debug("Fetching outlook for %s", day.value)
 
         response = await self._get(url)
         response.raise_for_status()
@@ -55,6 +59,7 @@ class SPCClient(BaseAPIClient):
         valid_start, valid_end = self._parse_valid_line(text)
         next_scheduled = self._parse_next_scheduled(text)
 
+        logger.debug("Fetched %s outlook: risk=%s, issued=%s", day.value, max_risk, issued)
         return ConvectiveOutlook(
             day=day,
             outlook_type=OutlookType.CATEGORICAL,
@@ -69,10 +74,12 @@ class SPCClient(BaseAPIClient):
     async def get_active_mds(self) -> list[MesoscaleDiscussion]:
         """Fetch list of active mesoscale discussions."""
         url = "/products/md/"
+        logger.debug("Fetching active MDs list")
         response = await self._get(url)
         response.raise_for_status()
 
         md_numbers = self._parse_md_list(response.text)[:10]  # Limit to most recent 10
+        logger.debug("Found %d MDs to fetch: %s", len(md_numbers), md_numbers)
 
         if not md_numbers:
             return []
@@ -80,15 +87,19 @@ class SPCClient(BaseAPIClient):
         async def fetch_md(num: int) -> MesoscaleDiscussion | None:
             try:
                 return await self.get_md(num)
-            except httpx.HTTPError:
+            except httpx.HTTPError as e:
+                logger.warning("Failed to fetch MD %d: %s", num, e)
                 return None
 
         results = await asyncio.gather(*[fetch_md(num) for num in md_numbers])
-        return [md for md in results if md is not None]
+        valid_mds = [md for md in results if md is not None]
+        logger.debug("Successfully fetched %d/%d MDs", len(valid_mds), len(md_numbers))
+        return valid_mds
 
     async def get_md(self, number: int) -> MesoscaleDiscussion:
         """Fetch a specific mesoscale discussion by number."""
         url = f"/products/md/md{number:04d}.html"
+        logger.debug("Fetching MD %d", number)
         response = await self._get(url)
         response.raise_for_status()
 
@@ -100,6 +111,7 @@ class SPCClient(BaseAPIClient):
         issued = self._parse_local_timestamp(text)
         _, expires = self._parse_valid_line(text)
 
+        logger.debug("Fetched MD %d: concerning=%s, watch_prob=%s", number, concerning, watch_probability)
         return MesoscaleDiscussion(
             number=number,
             text=text,
@@ -112,10 +124,12 @@ class SPCClient(BaseAPIClient):
     async def get_active_watches(self) -> list[Watch]:
         """Fetch list of active watches."""
         url = "/products/watch/"
+        logger.debug("Fetching active watches list")
         response = await self._get(url)
         response.raise_for_status()
 
         watch_info = self._parse_watch_list(response.text)[:10]  # Limit to most recent 10
+        logger.debug("Found %d watches to fetch", len(watch_info))
 
         if not watch_info:
             return []
@@ -123,18 +137,22 @@ class SPCClient(BaseAPIClient):
         async def fetch_watch(num: int, wtype: WatchType) -> Watch | None:
             try:
                 return await self.get_watch(num, wtype)
-            except httpx.HTTPError:
+            except httpx.HTTPError as e:
+                logger.warning("Failed to fetch watch %d: %s", num, e)
                 return None
 
         results = await asyncio.gather(
             *[fetch_watch(num, wtype) for num, wtype in watch_info]
         )
-        return [w for w in results if w is not None]
+        valid_watches = [w for w in results if w is not None]
+        logger.debug("Successfully fetched %d/%d watches", len(valid_watches), len(watch_info))
+        return valid_watches
 
     async def get_watch(self, number: int, watch_type: WatchType) -> Watch:
         """Fetch a specific watch by number."""
         prefix = "ww" if watch_type == WatchType.TORNADO else "ww"
         url = f"/products/watch/{prefix}{number:04d}.html"
+        logger.debug("Fetching watch %d", number)
         response = await self._get(url)
         response.raise_for_status()
 
@@ -145,6 +163,7 @@ class SPCClient(BaseAPIClient):
         issued = self._parse_local_timestamp(text)
         expires = self._parse_watch_expires(text, issued)
 
+        logger.debug("Fetched watch %d: type=%s, is_pds=%s", number, watch_type.value, is_pds)
         return Watch(
             number=number,
             watch_type=watch_type,

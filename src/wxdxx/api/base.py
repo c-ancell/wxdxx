@@ -1,9 +1,12 @@
 """Base API client with shared retry and rate-limiting logic."""
 
 import asyncio
+import logging
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 class BaseAPIClient:
@@ -76,7 +79,12 @@ class BaseAPIClient:
                         or response.status_code in self.RETRY_STATUS_CODES
                     )
                     if should_retry and attempt < self.MAX_RETRIES:
-                        await asyncio.sleep(self.RETRY_BACKOFF[attempt])
+                        delay = self.RETRY_BACKOFF[attempt]
+                        logger.warning(
+                            "Request to %s returned %d, retrying in %.1fs (attempt %d/%d)",
+                            url, response.status_code, delay, attempt + 1, self.MAX_RETRIES
+                        )
+                        await asyncio.sleep(delay)
                         continue
 
                     return response
@@ -84,8 +92,14 @@ class BaseAPIClient:
                 except (httpx.TransportError, httpx.TimeoutException) as e:
                     last_error = e
                     if attempt < self.MAX_RETRIES:
-                        await asyncio.sleep(self.RETRY_BACKOFF[attempt])
+                        delay = self.RETRY_BACKOFF[attempt]
+                        logger.warning(
+                            "Request to %s failed with %s, retrying in %.1fs (attempt %d/%d)",
+                            url, type(e).__name__, delay, attempt + 1, self.MAX_RETRIES
+                        )
+                        await asyncio.sleep(delay)
                     else:
+                        logger.error("Request to %s failed after %d retries: %s", url, self.MAX_RETRIES, e)
                         raise
 
             # Should not reach here, but satisfy type checker

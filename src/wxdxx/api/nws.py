@@ -1,12 +1,15 @@
 """NWS API client for fetching WFO products."""
 
 import asyncio
+import logging
 import re
 from datetime import datetime, timezone
 
 import httpx
 
 from .base import BaseAPIClient
+
+logger = logging.getLogger(__name__)
 from ..models.alert import AlertSeverity, AlertUrgency, WFOAlert
 from ..models.observation import Observation
 from ..models.wfo import WFOProduct
@@ -50,10 +53,14 @@ class NWSClient(BaseAPIClient):
 
     async def validate_wfo(self, wfo_id: str) -> bool:
         """Check if a WFO ID is valid."""
+        logger.debug("Validating WFO ID: %s", wfo_id)
         try:
             response = await self._get(f"/offices/{wfo_id.upper()}")
-            return response.status_code == 200
-        except httpx.HTTPError:
+            valid = response.status_code == 200
+            logger.debug("WFO %s validation: %s", wfo_id, valid)
+            return valid
+        except httpx.HTTPError as e:
+            logger.warning("Failed to validate WFO %s: %s", wfo_id, e)
             return False
 
     async def get_wfo_info(self, wfo_id: str) -> dict | None:
@@ -279,6 +286,7 @@ class NWSClient(BaseAPIClient):
         self, wfo_id: str, product_type: str, limit: int = 5
     ) -> list[WFOProduct]:
         """Fetch products of a specific type from a WFO."""
+        logger.debug("Fetching %s products for WFO %s (limit=%d)", product_type, wfo_id, limit)
         response = await self._get(
             "/products",
             params={
@@ -315,12 +323,12 @@ class NWSClient(BaseAPIClient):
                     full_product = await self.get_product(product.id)
                     product.text = full_product.text
                     product.expires = self._parse_ugc_expiry(full_product.text or "")
-                except Exception:
-                    # If fetch fails, leave expires as None (product will show without countdown)
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to fetch SPS text for %s: %s", product.id, e)
 
             await asyncio.gather(*[fetch_sps_text(p) for p in products])
 
+        logger.debug("Fetched %d %s products for WFO %s", len(products), product_type, wfo_id)
         return products
 
     async def get_product(self, product_id: str) -> WFOProduct:
@@ -381,9 +389,11 @@ class NWSClient(BaseAPIClient):
 
         # NWS API /alerts/active doesn't accept limit/status/message_type params
         # Fetch all and filter in Python
+        logger.debug("Fetching nationwide active alerts")
         response = await self._get("/alerts/active")
         response.raise_for_status()
         data = response.json()
+        logger.debug("Received %d raw alerts from NWS API", len(data.get("features", [])))
 
         # First pass: collect candidate alerts and their zone IDs (no WFO lookups yet)
         candidates: list[tuple[dict, str, list[str]]] = []  # (props, first_zone_id, all_zone_ids)
@@ -476,6 +486,7 @@ class NWSClient(BaseAPIClient):
             if len(all_alerts) >= limit:
                 break
 
+        logger.debug("Returning %d nationwide alerts after filtering", len(all_alerts))
         return all_alerts
 
     async def get_active_alerts(self, zones: list[str]) -> list[WFOAlert]:
@@ -490,6 +501,7 @@ class NWSClient(BaseAPIClient):
         if not zones:
             return []
 
+        logger.debug("Fetching active alerts for %d zones", len(zones))
         all_alerts: list[WFOAlert] = []
         seen_ids: set[str] = set()
 
@@ -506,6 +518,7 @@ class NWSClient(BaseAPIClient):
             )
             response.raise_for_status()
             data = response.json()
+            logger.debug("Chunk %d: received %d alerts", i // 50 + 1, len(data.get("features", [])))
 
             for feature in data.get("features", []):
                 props = feature.get("properties", {})
@@ -566,6 +579,7 @@ class NWSClient(BaseAPIClient):
                     )
                 )
 
+        logger.debug("Returning %d alerts for zone query", len(all_alerts))
         return all_alerts
 
     def _parse_datetime(self, dt_str: str | None) -> datetime | None:
