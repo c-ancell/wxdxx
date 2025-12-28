@@ -19,7 +19,10 @@ from .models.md import MesoscaleDiscussion
 from .models.outlook import ConvectiveOutlook, OutlookDay
 from .models.watch import Watch
 from .models.wfo import DEFAULT_PRODUCT_TYPES, WFOProduct
+from .models.observation import Observation
 from .widgets.help_screen import HelpScreen
+from .widgets.metar_details_screen import METARDetailsScreen
+from .widgets.metar_input import METARInputDialog
 from .widgets.news_ticker import NewsTicker, TickerHeadline
 from .widgets.product_view import ProductView
 from .widgets.settings_screen import SettingsResult, SettingsScreen
@@ -197,6 +200,7 @@ class WxDXX(App):
         Binding("w", "add_wfo", "Add WFO", show=False),
         Binding("W", "remove_wfo", "Remove WFO", show=False),
         Binding("L", "lookup_wfo", "Lookup WFO", show=False),
+        Binding("O", "lookup_metar", "METAR Lookup", show=False),
         Binding("?", "help", "Help"),  # Only show help hint; all shortcuts documented there
         Binding("tab", "toggle_focus", "Switch Panel", show=False),
         Binding("1", "view_day1", "Day 1", show=False),
@@ -1000,6 +1004,39 @@ class WxDXX(App):
         else:
             self.notify(f"WFO {wfo_id} not found", severity="error")
 
+    def action_lookup_metar(self) -> None:
+        """Show dialog to lookup METAR observation."""
+        self.push_screen(METARInputDialog(), callback=self._on_metar_lookup_result)
+
+    def _on_metar_lookup_result(self, result: str | None) -> None:
+        """Handle result from METAR lookup dialog."""
+        if result:
+            self.run_worker(self._lookup_metar(result))
+
+    async def _lookup_metar(self, station_id: str) -> None:
+        """Fetch and display METAR observation."""
+        self.notify(f"Looking up {station_id}...")
+
+        # Check cache first
+        cached = self._cache.get_observation(station_id)
+        if cached:
+            self.push_screen(METARDetailsScreen(station_id, cached))
+            return
+
+        # Validate station exists
+        is_valid = await self.nws_client.validate_station(station_id)
+        if not is_valid:
+            self.notify(f"Station {station_id} not found", severity="error")
+            return
+
+        # Fetch observation
+        observation = await self.nws_client.get_latest_observation(station_id)
+        if observation:
+            self._cache.set_observation(station_id, observation)
+            self.push_screen(METARDetailsScreen(station_id, observation))
+        else:
+            self.notify(f"No observation available for {station_id}", severity="warning")
+
     async def _add_wfo(self, wfo_id: str) -> None:
         """Add a WFO and fetch its products."""
         if wfo_id in self._tracked_wfos:
@@ -1135,7 +1172,7 @@ class WxDXX(App):
             product_view.show_error(f"Failed to fetch product: {e}")
 
     async def _load_alert(self, wfo_id: str, alert_id: str, item_id: str) -> None:
-        """Load and display an alert."""
+        """Load and display an alert with nearby station observations."""
         product_view = self.query_one(ProductView)
         sidebar = self.query_one(Sidebar)
 
@@ -1153,7 +1190,19 @@ class WxDXX(App):
             for alert in cached_alerts:
                 if alert.id == alert_id or alert.sidebar_id.endswith(alert_id):
                     self._set_product_timing(issued=alert.effective, expires=alert.expires)
-                    product_view.show_product(alert.title, alert.text)
+
+                    # Build alert text with nearby stations
+                    alert_text = alert.text
+
+                    # Fetch nearby stations if we have affected zones
+                    if alert.affected_zones:
+                        observations = await self._get_alert_nearby_observations(
+                            alert.affected_zones
+                        )
+                        if observations:
+                            alert_text += self._format_nearby_stations_section(observations)
+
+                    product_view.show_product(alert.title, alert_text)
 
                     # Store affected zones and WFO for map display
                     # Use the tracked WFO ID (wfo_id) since alert.wfo can be
@@ -1175,6 +1224,43 @@ class WxDXX(App):
         self._current_alert_zones = []
         self._current_alert_wfo = ""
         product_view.show_error("Alert no longer available. Try refreshing.")
+
+    async def _get_alert_nearby_observations(
+        self, zone_ids: list[str], limit: int = 10
+    ) -> list[Observation]:
+        """Fetch observations for stations in alert zones."""
+        if not zone_ids:
+            return []
+
+        try:
+            observations = await self.nws_client.get_observations_for_zones(
+                zone_ids, limit=limit
+            )
+            return observations
+        except Exception:
+            return []
+
+    def _format_nearby_stations_section(self, observations: list[Observation]) -> str:
+        """Format nearby station observations as a text section."""
+        if not observations:
+            return ""
+
+        lines = [
+            "",
+            "",
+            "=" * 50,
+            "NEARBY STATIONS - Current Conditions",
+            "=" * 50,
+            "",
+        ]
+
+        for obs in observations:
+            lines.append(obs.format_compact())
+
+        lines.append("")
+        lines.append("[Press O for detailed METAR lookup]")
+
+        return "\n".join(lines)
 
 
 def main() -> None:

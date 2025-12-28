@@ -34,6 +34,7 @@ HELP_TEXT = f"""\
   w          Add a WFO to track
   W          Remove a tracked WFO
   L          Lookup WFO details
+  O          Lookup METAR by station code
 
 [bold]Scrolling (Sidebar & Content)[/bold]
   j / ↓      Move down one item/line

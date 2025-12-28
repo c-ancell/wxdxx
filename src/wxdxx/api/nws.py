@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import httpx
 
 from ..models.alert import AlertSeverity, AlertUrgency, WFOAlert
+from ..models.observation import Observation
 from ..models.wfo import WFOProduct
 from ..models.zone import ZoneGeometry
 
@@ -652,3 +653,145 @@ class NWSClient:
             return expiry
         except (ValueError, IndexError):
             return None
+
+    # ---------- Observation/METAR methods ----------
+
+    async def validate_station(self, station_id: str) -> bool:
+        """Check if a station ID is valid.
+
+        Args:
+            station_id: ICAO station identifier (e.g., "KORD")
+
+        Returns:
+            True if station exists, False otherwise.
+        """
+        try:
+            response = await self._get(f"/stations/{station_id.upper()}")
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    async def get_latest_observation(self, station_id: str) -> Observation | None:
+        """Get the latest observation for a station.
+
+        Args:
+            station_id: ICAO station identifier (e.g., "KORD")
+
+        Returns:
+            Observation with current conditions, or None if unavailable.
+        """
+        try:
+            response = await self._get(
+                f"/stations/{station_id.upper()}/observations/latest"
+            )
+            if response.status_code != 200:
+                return None
+            data = response.json()
+
+            props = data.get("properties", {})
+
+            # Helper to extract quantitative values (NWS returns {"value": X, "unitCode": "..."})
+            def get_value(field: str) -> float | None:
+                val = props.get(field)
+                if val is None or not isinstance(val, dict):
+                    return None
+                return val.get("value")
+
+            # Wind speed comes in m/s, convert to knots
+            wind_speed_ms = get_value("windSpeed")
+            wind_gust_ms = get_value("windGust")
+
+            return Observation(
+                station_id=station_id.upper(),
+                station_name=props.get("textDescription"),
+                timestamp=self._parse_datetime(props.get("timestamp")),
+                temperature_c=get_value("temperature"),
+                dewpoint_c=get_value("dewpoint"),
+                wind_direction_deg=(
+                    int(get_value("windDirection"))
+                    if get_value("windDirection") is not None
+                    else None
+                ),
+                wind_speed_kt=(
+                    wind_speed_ms * 1.94384 if wind_speed_ms is not None else None
+                ),
+                wind_gust_kt=(
+                    wind_gust_ms * 1.94384 if wind_gust_ms is not None else None
+                ),
+                barometric_pressure_hpa=get_value("barometricPressure"),
+                visibility_m=get_value("visibility"),
+                relative_humidity_pct=get_value("relativeHumidity"),
+                wind_chill_c=get_value("windChill"),
+                heat_index_c=get_value("heatIndex"),
+                raw_metar=props.get("rawMessage"),
+                text_description=props.get("textDescription"),
+            )
+        except Exception:
+            return None
+
+    async def get_zone_stations(self, zone_id: str) -> list[str]:
+        """Get station IDs for stations in a forecast zone.
+
+        Args:
+            zone_id: Zone ID (e.g., "OKZ025")
+
+        Returns:
+            List of station ICAO identifiers.
+        """
+        try:
+            response = await self._get(f"/zones/forecast/{zone_id}/stations")
+            if response.status_code != 200:
+                return []
+            data = response.json()
+
+            stations = []
+            for feature in data.get("features", []):
+                props = feature.get("properties", {})
+                station_id = props.get("stationIdentifier")
+                if station_id:
+                    stations.append(station_id)
+
+            return stations
+        except Exception:
+            return []
+
+    async def get_observations_for_zones(
+        self, zone_ids: list[str], limit: int = 10
+    ) -> list[Observation]:
+        """Get latest observations for stations in specified zones.
+
+        Fetches stations for each zone, deduplicates, then fetches observations
+        for up to `limit` unique stations.
+
+        Args:
+            zone_ids: List of zone IDs
+            limit: Maximum number of observations to return
+
+        Returns:
+            List of Observation objects, sorted by station ID.
+        """
+        if not zone_ids:
+            return []
+
+        # Fetch stations for all zones in parallel
+        station_lists = await asyncio.gather(
+            *[self.get_zone_stations(zone_id) for zone_id in zone_ids]
+        )
+
+        # Deduplicate and limit
+        all_stations: set[str] = set()
+        for station_list in station_lists:
+            all_stations.update(station_list)
+
+        stations_to_fetch = sorted(list(all_stations))[:limit]
+
+        if not stations_to_fetch:
+            return []
+
+        # Fetch observations in parallel
+        observations = await asyncio.gather(
+            *[self.get_latest_observation(station_id) for station_id in stations_to_fetch]
+        )
+
+        # Filter out None results
+        return [obs for obs in observations if obs is not None]

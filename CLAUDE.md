@@ -143,17 +143,21 @@ We use [Semantic Versioning](https://semver.org/) with git tags. Version is stor
 - SPS Expiry Filtering: Special Weather Statements parsed for UGC header expiry times; expired SPS products automatically filtered from sidebar with countdown display
 - Unread indicators: New/updated products show a filled circle (●) in sidebar; circle disappears when product is viewed. Dark circle for highlighted items, light circle for regular items.
 - News Ticker: Scrolling bar below header showing nationwide NWS warnings and SPC watches. Headlines colored by event type (TOR=red, SVR=yellow, etc.). New alerts (appearing after startup) flash for first scroll cycle, solid background for second cycle, then text color only. Headlines at startup display as regular (no flash). Headlines sorted by severity (TOR > SVR > FFW > watches). Expired alerts are automatically filtered out on each scroll cycle.
+- METAR Lookup: Press 'O' to look up current weather observations by ICAO station code (e.g., KORD, KDFW). Shows temperature, wind, visibility, humidity, pressure, and raw METAR text.
+- Alert Nearby Stations: When viewing an alert, nearby weather stations from affected zones are displayed at the bottom showing current conditions.
 
 ## TODO / Not Yet Implemented
 
 ### Small enhancements
-(None currently)
+- Zone map: Color affected zones to match alert color (currently all red, should match TOR=red, SVR=yellow, etc.)
+- Zone map: Render major cities (a few per WFO) as reference points to help users orient themselves
+- News ticker: Alert updates should not trigger "NEW" flash designation, or should display "UPDATE" instead
 
 ### Larger effort
 - Make sidebar sections collapsible
 - Option to show older WFO product versions (currently only shows latest; some users may want to see previous versions)
 - Add "R" (SHIFT+r) for hard refresh: Currently 'r' clears all caches and refreshes. Consider making 'r' a soft refresh (use cached data if valid) and 'R' a hard refresh (clear all caches first). This would make auto-refresh and 'r' behave the same way.
-- METAR support
+- ~~METAR support~~: ✅ Done - Added METAR lookup (O hotkey) and nearby stations display in alerts
 - AFD trend analysis: Track AFD content across issuances to detect changes in forecast confidence for major weather events. Flag increasing/decreasing confidence, highlight surprises vs long-range expectations, and alert users to "things to keep an eye on."
 
 ### Epic: Data Source Stewardship

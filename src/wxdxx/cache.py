@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 if TYPE_CHECKING:
     from .models.md import MesoscaleDiscussion
+    from .models.observation import Observation
     from .models.outlook import ConvectiveOutlook
     from .models.watch import Watch
     from .models.wfo import WFOAlert, WFOProduct
@@ -27,6 +28,7 @@ DEFAULT_TTLS: dict[str, float] = {
     "zone": 86400.0,  # 24 hours
     "list": 120.0,  # 2 minutes
     "ticker": 60.0,  # 1 minute
+    "observation": 600.0,  # 10 minutes (METAR updates every 10-20 min)
 }
 
 # Reduced TTL for empty content (seconds)
@@ -595,6 +597,16 @@ class ProductCache:
     def get_ticker_alerts(self) -> list[WFOAlert] | None:
         """Get cached nationwide alerts for ticker."""
         return self.get("nws:ticker:nationwide")
+
+    # --- Observation helpers ---
+
+    def set_observation(self, station_id: str, observation: Observation) -> None:
+        """Store a weather observation."""
+        self.set(f"nws:observation:{station_id.upper()}", observation)
+
+    def get_observation(self, station_id: str) -> Observation | None:
+        """Get a cached weather observation."""
+        return self.get(f"nws:observation:{station_id.upper()}")
 
     # === Internal Methods ===
 
