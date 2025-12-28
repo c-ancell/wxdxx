@@ -377,6 +377,7 @@ class NWSClient(BaseAPIClient):
             "Ice Storm Warning",
             "Winter Storm Warning",
             "Winter Weather Advisory",
+            "Snow Squall Warning",
             # Wind
             "High Wind Warning",
             # Heat
@@ -397,8 +398,9 @@ class NWSClient(BaseAPIClient):
         data = response.json()
         logger.debug("Received %d raw alerts from NWS API", len(data.get("features", [])))
 
-        # First pass: collect candidate alerts and their zone IDs (no WFO lookups yet)
-        candidates: list[tuple[dict, str, list[str]]] = []  # (props, first_zone_id, all_zone_ids)
+        # First pass: collect candidate alerts with zone IDs and senderCode
+        # (props, first_zone_id, all_zone_ids, sender_code)
+        candidates: list[tuple[dict, str, list[str], str]] = []
         for feature in data.get("features", []):
             props = feature.get("properties", {})
             alert_id = props.get("id", "")
@@ -423,10 +425,19 @@ class NWSClient(BaseAPIClient):
             zone_ids = self._extract_zone_ids(affected_zone_urls)
             first_zone_id = zone_ids[0] if zone_ids else ""
 
-            candidates.append((props, first_zone_id, zone_ids))
+            # Extract senderCode for reliable WFO attribution (like sidebar method)
+            sender_code = props.get("senderCode", "").upper()
 
-        # Batch lookup all WFOs in parallel
-        unique_zones = list({first_zone for _, first_zone, _ in candidates if first_zone})
+            candidates.append((props, first_zone_id, zone_ids, sender_code))
+
+        # Batch lookup WFOs for zones where senderCode is missing
+        # Only look up zones that don't already have a senderCode
+        zones_needing_lookup = [
+            first_zone
+            for _, first_zone, _, sender_code in candidates
+            if first_zone and not sender_code
+        ]
+        unique_zones = list(set(zones_needing_lookup))
         if unique_zones:
             wfo_results = await asyncio.gather(
                 *[self.get_zone_wfo(zone_id) for zone_id in unique_zones]
@@ -439,17 +450,19 @@ class NWSClient(BaseAPIClient):
         all_alerts: list[WFOAlert] = []
         seen_wfo_events: set[str] = set()
 
-        for props, first_zone_id, zone_ids in candidates:
-            wfo = zone_to_wfo.get(first_zone_id, "") if first_zone_id else ""
+        for props, first_zone_id, zone_ids, sender_code in candidates:
+            # Use senderCode as primary WFO source (more reliable)
+            # Fall back to zone lookup only if senderCode is missing
+            wfo = sender_code or zone_to_wfo.get(first_zone_id, "")
             event = props.get("event", "")
 
-            # Create WFO+event key for deduplication
-            wfo_key = f"{wfo}:{event}"
-
-            # Skip if we already have this WFO+event combo
-            if wfo_key in seen_wfo_events:
-                continue
-            seen_wfo_events.add(wfo_key)
+            # Only deduplicate by WFO+event if we have a valid WFO
+            # (avoids incorrectly deduping alerts with failed WFO lookups)
+            if wfo:
+                wfo_key = f"{wfo}:{event}"
+                if wfo_key in seen_wfo_events:
+                    continue
+                seen_wfo_events.add(wfo_key)
 
             # Parse severity and urgency
             severity_str = props.get("severity", "Unknown")
