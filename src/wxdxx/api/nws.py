@@ -427,14 +427,15 @@ class NWSClient(BaseAPIClient):
 
             # Extract senderCode for reliable WFO attribution (like sidebar method)
             sender_code = props.get("senderCode", "").upper()
+            sender_name = props.get("senderName", "")
 
-            candidates.append((props, first_zone_id, zone_ids, sender_code))
+            candidates.append((props, first_zone_id, zone_ids, sender_code, sender_name))
 
         # Batch lookup WFOs for zones where senderCode is missing
         # Only look up zones that don't already have a senderCode
         zones_needing_lookup = [
             first_zone
-            for _, first_zone, _, sender_code in candidates
+            for _, first_zone, _, sender_code, _ in candidates
             if first_zone and not sender_code
         ]
         unique_zones = list(set(zones_needing_lookup))
@@ -450,10 +451,15 @@ class NWSClient(BaseAPIClient):
         all_alerts: list[WFOAlert] = []
         seen_wfo_events: set[str] = set()
 
-        for props, first_zone_id, zone_ids, sender_code in candidates:
+        for props, first_zone_id, zone_ids, sender_code, sender_name in candidates:
             # Use senderCode as primary WFO source (more reliable)
-            # Fall back to zone lookup only if senderCode is missing
+            # Fall back to zone lookup, then senderName parsing
             wfo = sender_code or zone_to_wfo.get(first_zone_id, "")
+            if not wfo and sender_name and "NWS " in sender_name:
+                # Last resort: parse WFO from senderName (e.g., "NWS Norman OK")
+                parts = sender_name.replace("NWS ", "").split()
+                if parts:
+                    wfo = parts[0][:3].upper()
             event = props.get("event", "")
 
             # Only deduplicate by WFO+event if we have a valid WFO
