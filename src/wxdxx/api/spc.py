@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
+from .base import BaseAPIClient
+
 # US timezone offsets (hours from UTC)
 # Standard time offsets
 US_TIMEZONE_OFFSETS: dict[str, int] = {
@@ -31,56 +33,11 @@ from ..models.outlook import ConvectiveOutlook, OutlookDay, OutlookType, RiskLev
 from ..models.watch import Watch, WatchType
 
 
-class SPCClient:
+class SPCClient(BaseAPIClient):
     """Client for fetching products from the Storm Prediction Center."""
 
     BASE_URL = "https://www.spc.noaa.gov"
     MAX_CONCURRENT_REQUESTS = 3  # Limit concurrent requests to be a good citizen
-    MAX_RETRIES = 3  # Max retry attempts (total attempts = MAX_RETRIES + 1)
-    RETRY_BACKOFF = (1.0, 2.0, 4.0)  # Exponential backoff delays in seconds
-
-    def __init__(self) -> None:
-        self._client = httpx.AsyncClient(
-            base_url=self.BASE_URL,
-            timeout=30.0,
-            headers={
-                "User-Agent": "WxDXX/0.1.2 (https://github.com/c-ancell/wxdxx, wxdxxapp@gmail.com)"
-            },
-        )
-        self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_REQUESTS)
-
-    async def _get(self, url: str) -> httpx.Response:
-        """Make a rate-limited GET request with retry on transient failures."""
-        async with self._semaphore:
-            last_error: Exception | None = None
-            for attempt in range(self.MAX_RETRIES + 1):
-                try:
-                    response = await self._client.get(url)
-                    # Retry on server errors (5xx)
-                    if response.status_code >= 500 and attempt < self.MAX_RETRIES:
-                        await asyncio.sleep(self.RETRY_BACKOFF[attempt])
-                        continue
-                    return response
-                except (httpx.TransportError, httpx.TimeoutException) as e:
-                    last_error = e
-                    if attempt < self.MAX_RETRIES:
-                        await asyncio.sleep(self.RETRY_BACKOFF[attempt])
-                    else:
-                        raise
-            # Should not reach here, but satisfy type checker
-            if last_error:
-                raise last_error
-            raise RuntimeError("Unexpected retry loop exit")
-
-    async def close(self) -> None:
-        """Close the HTTP client."""
-        await self._client.aclose()
-
-    async def __aenter__(self) -> "SPCClient":
-        return self
-
-    async def __aexit__(self, *args) -> None:
-        await self.close()
 
     async def get_outlook(self, day: OutlookDay) -> ConvectiveOutlook:
         """Fetch a convective outlook for the specified day."""
