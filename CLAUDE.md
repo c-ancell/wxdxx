@@ -283,3 +283,240 @@ Display geographic context for warnings, watches, MDs, and WFO coverage areas us
 
 ### Architecture
 - Screens directory contains unused stubs (OutlooksScreen, WatchesScreen, etc.) from early development. The current single-screen architecture with sidebar + ProductView is simpler and works well for this app's scope. Could delete the stubs or revisit if the app grows significantly more complex, but not a priority.
+
+## Architecture Standards & Best Practices
+
+*Established 2025-12-27 during comprehensive codebase review.*
+
+### Overall Assessment
+
+**Current Grade: B+** — Solid foundation with clean domain modeling, excellent caching, and good async patterns. Main weaknesses are code duplication (especially color mapping), inconsistent error handling, and sparse test coverage. Estimated 20-30% of code could be eliminated through better abstraction.
+
+### Code Organization Principles
+
+**1. Single Source of Truth**
+- Constants, color mappings, and configuration values should have ONE canonical location
+- Currently violated: event-to-color mapping exists in 4+ places (sidebar.py, news_ticker.py, app.py, zone_map.py)
+
+**2. DRY (Don't Repeat Yourself)**
+- Extract shared logic into utilities when patterns appear 3+ times
+- Currently violated: API client `_get()` methods, sidebar update methods, datetime parsing
+
+**3. Fail Fast, Fail Loudly**
+- Prefer exceptions over silent failures or magic return values
+- Log all errors (currently: zero logging)
+
+**4. Type Everything**
+- All public functions should have type hints
+- Use `| None` instead of `Optional[]` (Python 3.10+ style)
+- Avoid `Any` except for truly dynamic data
+
+### Standards to Follow
+
+**Error Handling**
+```python
+# DO: Raise custom exceptions from API layer
+class APIError(Exception): pass
+class NetworkError(APIError): pass
+class DataError(APIError): pass
+
+# DO: Convert to user notifications in app layer
+try:
+    result = await api.fetch()
+except APIError as e:
+    self.notify(f"Error: {e}", severity="error")
+
+# DON'T: Return None and check everywhere
+result = await api.fetch()  # Returns None on error
+if result is None:
+    # Easy to forget this check
+```
+
+**Return Types**
+```python
+# DO: Use consistent return patterns
+async def get_product(self, id: str) -> Product | None:
+    """Returns None if not found, raises APIError on network issues."""
+
+# DON'T: Mix patterns
+async def get_product(self, id: str) -> Product:  # Sometimes returns empty Product
+async def get_other(self, id: str) -> str:  # Returns "" on error
+async def get_third(self, id: str) -> dict | None:  # Returns None on ANY error
+```
+
+**Magic Numbers → Constants**
+```python
+# DO: Use module-level or class constants
+class App:
+    MIN_REFRESH_DISPLAY_TIME = 2.0  # seconds
+    FAST_POLL_INTERVAL = 15  # seconds
+    FAST_POLL_MAX_DURATION = 300  # seconds
+
+# DON'T: Inline magic numbers
+await asyncio.sleep(2.0)
+if elapsed > 300:
+```
+
+**Model Consistency**
+- All product models should inherit from a `BaseProduct` with common fields
+- Use `id` as the standard identifier field name (not `number`, `day`, etc.)
+- Computed properties should be `@property` methods, not stored fields
+
+### Refactoring Roadmap
+
+#### Critical (Do Before Adding Features)
+
+**1. Centralize Event Color Mapping**
+Create `src/wxdxx/colors.py`:
+```python
+from enum import Enum
+
+class EventType(Enum):
+    TORNADO_WARNING = "tor"
+    SEVERE_THUNDERSTORM_WARNING = "svr"
+    # ...
+
+EVENT_COLORS = {
+    EventType.TORNADO_WARNING: {"bg": "#ff0000", "fg": "#ffffff"},
+    # ...
+}
+
+def get_event_color(event_code: str) -> tuple[str, str]:
+    """Returns (background, foreground) color for event type."""
+```
+This eliminates 400+ lines of duplicate CSS and 4 separate mapping functions.
+
+**2. Consolidate API Client Base**
+Create `src/wxdxx/api/base.py`:
+```python
+class BaseAPIClient:
+    def __init__(self, base_url: str, max_concurrent: int):
+        self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._client = httpx.AsyncClient(...)
+
+    async def _get(self, url: str) -> httpx.Response:
+        """Shared retry/backoff logic."""
+```
+SPC and NWS clients inherit from this.
+
+**3. Add Logging**
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+# At module level in each file
+logger.debug("Fetching MD %s", md_number)
+logger.error("Failed to parse response", exc_info=True)
+```
+
+#### High Priority
+
+**4. Extract BaseProduct Model**
+```python
+class BaseProduct(BaseModel):
+    id: str
+    issued: datetime | None = None
+    text: str = ""
+
+    @property
+    def title(self) -> str:
+        raise NotImplementedError
+```
+
+**5. Refactor Sidebar Update Methods**
+Extract generic `_update_category(category: str, items: list, item_builder: Callable)`.
+
+**6. Add Cache Unit Tests**
+ProductCache has complex logic (LRU eviction, pattern invalidation, TTL) but zero tests.
+
+**7. Enable mypy**
+Add to CI/pre-commit. Start with `--ignore-missing-imports` and tighten over time.
+
+#### Medium Priority
+
+**8. Extract Datetime Parsing Utilities**
+Create `src/wxdxx/utils/datetime.py` for:
+- `parse_local_timestamp()`
+- `parse_zulu_time()`
+- `parse_ugc_expiry()`
+- `format_countdown()`
+
+**9. Generate CSS from Color Registry**
+Instead of 400 lines of hand-written CSS, generate from `EVENT_COLORS`:
+```python
+def generate_alert_css() -> str:
+    lines = []
+    for event_type, colors in EVENT_COLORS.items():
+        lines.append(f".alert-{event_type.value} {{ background: {colors['bg']}; }}")
+    return "\n".join(lines)
+```
+
+**10. Use platformdirs for Config**
+Replace hardcoded `~/.config/wxdxx/` with proper XDG support.
+
+#### Low Priority
+
+**11. Optimize LRU Cache**
+Replace O(n) list operations with `collections.OrderedDict`.
+
+**12. Add Cache Instrumentation**
+Track hit/miss ratios, eviction counts for debugging.
+
+**13. Delete Unused screens/ Directory**
+Or repurpose if we add multi-screen navigation.
+
+### Testing Strategy
+
+**Current Coverage:**
+- ✅ Smoke tests (app startup, widget rendering)
+- ✅ SPC parser tests (with HTML fixtures)
+- ✅ NWS parser tests (with JSON fixtures)
+- ❌ Cache tests
+- ❌ Config tests
+- ❌ Widget interaction tests
+- ❌ Integration tests
+
+**Testing Priorities:**
+1. Add cache.py unit tests (TTL, LRU, invalidation patterns)
+2. Add widget pilot tests for Sidebar interactions
+3. Add VCR.py-style cassette tests for API clients
+4. Add model validation tests (edge cases, invalid data)
+
+**Test File Naming:**
+- `test_{module}_unit.py` - Unit tests
+- `test_{module}_integration.py` - Integration tests
+- `fixtures/{module}/` - Test fixtures per module
+
+### Performance Considerations
+
+**Current Bottlenecks:**
+- Zone geometry fetching (67-615 points/zone, but cached 24hr)
+- Ticker headline sorting on every scroll (could cache sort)
+- Sidebar re-rendering on every update (could diff)
+
+**Future Optimization Opportunities:**
+- Lazy load zone geometry only when map is visible
+- Debounce rapid sidebar updates
+- Consider virtual scrolling if sidebar grows large
+
+### Dependencies Philosophy
+
+**Current Approach (Minimal):**
+- httpx for HTTP (async-native, better than aiohttp)
+- Pydantic for models (validation + serialization)
+- Textual for TUI (Rich-based, modern)
+
+**Adding Dependencies:**
+- Prefer stdlib when possible (e.g., `zoneinfo` over `pytz`)
+- Avoid AGPL dependencies (e.g., didn't use drawille)
+- New deps need justification — what problem does it solve that we can't easily solve ourselves?
+
+### Code Review Checklist
+
+When reviewing code changes, verify:
+- [ ] Type hints on all public functions
+- [ ] No magic numbers (use constants)
+- [ ] Error handling follows the pattern (exceptions in API, notifications in app)
+- [ ] No duplicate logic (especially color mapping)
+- [ ] Tests added for new parser/logic code
+- [ ] CLAUDE.md updated if adding features or TODOs
