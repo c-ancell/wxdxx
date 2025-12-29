@@ -1139,10 +1139,29 @@ class WxDXX(App):
         # Fetch products
         self.run_worker(self._refresh_wfo_products(wfo_id))
 
+    async def _prefetch_zones(self, wfo_id: str) -> list[str]:
+        """Pre-fetch and cache zones for a WFO.
+
+        Called early to run in parallel with product fetches, so zones
+        are cached before alert fetch needs them.
+        """
+        try:
+            zones = await self.nws_client.get_wfo_zones(wfo_id)
+            self._cache.set_wfo_zones(wfo_id, zones)
+            return zones
+        except Exception:
+            return []
+
     async def _refresh_wfo_products(self, wfo_id: str) -> None:
         """Refresh products and alerts for a specific WFO."""
         self._loading_wfos.add(wfo_id)
         self._update_clock_display()
+
+        # Pre-fetch zones early so they're cached before alert fetch needs them
+        # This runs in parallel with product fetches below
+        zone_task: asyncio.Task[list[str]] | None = None
+        if self._cache.get_wfo_zones(wfo_id) is None:
+            zone_task = asyncio.create_task(self._prefetch_zones(wfo_id))
 
         async def fetch_product_type(
             product_type: str,
@@ -1163,6 +1182,13 @@ class WxDXX(App):
                 active_products = [
                     p for p in products if p.expires is None or p.expires > now
                 ]
+
+                # Cache products that already have text (e.g., SPS products)
+                # This avoids a second API call when the user clicks on them
+                for p in active_products:
+                    if p.text:
+                        self._cache.set_wfo_product(p.id, p)
+
                 result = [
                     (
                         p.id,
@@ -1206,15 +1232,21 @@ class WxDXX(App):
 
         try:
             sidebar = self.query_one(Sidebar)
-            # Fetch products and alerts in parallel
-            results = await asyncio.gather(
+
+            # Fetch all products in parallel (zone prefetch runs concurrently if started)
+            product_results = await asyncio.gather(
                 *[fetch_product_type(pt) for pt in DEFAULT_PRODUCT_TYPES],
-                fetch_alerts(),
             )
-            # Separate product results from alerts
-            # Last result is alerts, rest are product lists
-            product_results: list[list[tuple[str, str, str, datetime | None]]] = list(results[:-1])  # type: ignore[arg-type]
-            alerts: list[WFOAlert] = results[-1]  # type: ignore[assignment]
+
+            # Ensure zones are cached before alert fetch (if we started a prefetch)
+            if zone_task is not None:
+                try:
+                    await zone_task
+                except Exception:
+                    pass  # Zone fetch failed, fetch_alerts will handle gracefully
+
+            # Now fetch alerts (zones are guaranteed cached or failed gracefully)
+            alerts = await fetch_alerts()
             # Flatten product results
             products_data = [item for sublist in product_results for item in sublist]
             sidebar.update_wfo_products(wfo_id, products_data, alerts, read_items=self._read_items)

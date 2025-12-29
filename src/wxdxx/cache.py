@@ -27,7 +27,7 @@ DEFAULT_TTLS: dict[str, float] = {
     "alert": 120.0,  # 2 minutes
     "product": 1800.0,  # 30 minutes
     "zone": 86400.0,  # 24 hours
-    "list": 120.0,  # 2 minutes
+    "list": 300.0,  # 5 minutes
     "ticker": 60.0,  # 1 minute
     "observation": 600.0,  # 10 minutes (METAR updates every 10-20 min)
 }

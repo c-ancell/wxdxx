@@ -41,7 +41,7 @@ class NWSClient(BaseAPIClient):
     """Client for fetching products from the NWS API."""
 
     BASE_URL = "https://api.weather.gov"
-    MAX_CONCURRENT_REQUESTS = 8  # NWS API is generous but we still limit
+    MAX_CONCURRENT_REQUESTS = 16  # NWS API is generous, increased for better parallelism
     RETRY_STATUS_CODES = {429}  # Retry on rate limit in addition to 5xx
     DEFAULT_HEADERS = {"Accept": "application/geo+json"}
 
