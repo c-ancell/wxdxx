@@ -724,9 +724,9 @@ class NWSClient(BaseAPIClient):
     ) -> list[Observation]:
         """Get latest observations for stations in specified zones.
 
-        Fetches stations for each zone, deduplicates, then fetches observations
-        for up to `limit` unique stations. Prioritizes major airports over
-        regional stations for more reliable observations.
+        Fetches stations for a subset of zones, deduplicates, then fetches
+        observations for up to `limit` unique stations. Prioritizes major
+        airports over regional stations for more reliable observations.
 
         Args:
             zone_ids: List of zone IDs
@@ -738,9 +738,14 @@ class NWSClient(BaseAPIClient):
         if not zone_ids:
             return []
 
-        # Fetch stations for all zones in parallel
+        # Limit zones to query to avoid excessive API calls
+        # (large watches can have 50+ zones, but we only need ~10 stations)
+        max_zones = min(len(zone_ids), 15)
+        zones_to_query = zone_ids[:max_zones]
+
+        # Fetch stations for zones in parallel
         station_lists = await asyncio.gather(
-            *[self.get_zone_stations(zone_id) for zone_id in zone_ids]
+            *[self.get_zone_stations(zone_id) for zone_id in zones_to_query]
         )
 
         # Deduplicate
