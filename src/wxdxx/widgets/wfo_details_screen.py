@@ -5,6 +5,8 @@ from textual.containers import VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
+from wxdxx.models.wfo import WFO_CITIES
+
 
 class WFODetailsScreen(ModalScreen[None]):
     """Modal screen showing WFO details."""
@@ -90,6 +92,14 @@ class WFODetailsScreen(ModalScreen[None]):
         lines.append(f"  Counties: {len(counties)}")
         if fire_zones:
             lines.append(f"  Fire Weather Zones: {len(fire_zones)}")
+
+        # Major cities section
+        cities = WFO_CITIES.get(self.wfo_id, [])
+        if cities:
+            lines.append("")
+            lines.append("[bold]Major Cities[/bold]")
+            for city in cities:
+                lines.append(f"  {city}")
 
         lines.append("")
         lines.append("[dim]Press Escape to close[/dim]")
