@@ -1161,6 +1161,9 @@ class WxDXX(App):
         product_view = self.query_one(ProductView)
         sidebar = self.query_one(Sidebar)
 
+        # Show loading immediately for user feedback
+        product_view.show_loading("Fetching product...")
+
         # Mark as read
         self._read_items.add(item_id)
         sidebar.mark_item_as_read(item_id)
@@ -1173,7 +1176,6 @@ class WxDXX(App):
             return
 
         # Fetch from API
-        product_view.show_loading("Fetching product...")
         try:
             product = await self.nws_client.get_product(product_id)
             self._cache.set_wfo_product(product_id, product)
@@ -1187,6 +1189,9 @@ class WxDXX(App):
         """Load and display an alert with nearby station observations."""
         product_view = self.query_one(ProductView)
         sidebar = self.query_one(Sidebar)
+
+        # Show loading immediately for user feedback
+        product_view.show_loading("Loading alert...")
 
         # Mark as read
         self._read_items.add(item_id)
