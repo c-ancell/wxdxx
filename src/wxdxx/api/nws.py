@@ -272,19 +272,27 @@ class NWSClient(BaseAPIClient):
         return await self.get_zones_geometry(zone_ids)
 
     async def get_wfo_zones(self, wfo_id: str) -> list[str]:
-        """Fetch responsible forecast zones for a WFO.
+        """Fetch responsible zones for a WFO (forecast + county).
+
+        Includes both forecast zones and county zones since severe weather
+        warnings are typically issued for county zones.
 
         Returns:
-            List of zone IDs (e.g., ["OKZ025", "OKZ026", ...])
+            List of zone IDs (e.g., ["OKZ025", "OKC025", ...])
         """
         response = await self._get(f"/offices/{wfo_id.upper()}")
         response.raise_for_status()
         data = response.json()
 
-        # Extract zone IDs from URIs
+        # Extract zone IDs from URIs for both forecast and county zones
         # Format: "https://api.weather.gov/zones/forecast/OKZ025"
+        #         "https://api.weather.gov/zones/county/OKC025"
         zones = []
         for zone_uri in data.get("responsibleForecastZones", []):
+            zone_id = zone_uri.split("/")[-1]
+            if zone_id:
+                zones.append(zone_id)
+        for zone_uri in data.get("responsibleCounties", []):
             zone_id = zone_uri.split("/")[-1]
             if zone_id:
                 zones.append(zone_id)
