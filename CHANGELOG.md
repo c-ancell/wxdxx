@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.18] - 2025-12-28
+
+### Fixed
+
+- METAR lookup now shows consistent display format with all fields (#1)
+- Raw METAR always displayed (fetches from Aviation Weather API as fallback)
+- Map city names now use consistent abbreviations instead of mixing airport codes (#5)
+
 ## [0.8.17] - 2025-12-28
 
 ### Added
