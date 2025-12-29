@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
@@ -188,7 +189,8 @@ class ProductCache:
         self._empty_content_ttl = empty_content_ttl
         self._empty_threshold = empty_threshold
         self._max_size = max_size
-        self._access_order: list[str] = []  # For LRU eviction
+        # OrderedDict for O(1) LRU operations (vs O(n) list)
+        self._access_order: OrderedDict[str, None] = OrderedDict()
 
     # === Core CRUD Operations ===
 
@@ -206,13 +208,10 @@ class ProductCache:
             return None
         if time.monotonic() > entry.expires_at:
             del self._cache[key]
-            if key in self._access_order:
-                self._access_order.remove(key)
+            self._access_order.pop(key, None)
             return None
-        # Update access order for LRU
-        if key in self._access_order:
-            self._access_order.remove(key)
-        self._access_order.append(key)
+        # Update access order for LRU (O(1) with OrderedDict)
+        self._access_order.move_to_end(key)
         return entry.value
 
     def set(
@@ -264,10 +263,12 @@ class ProductCache:
 
         self._cache[key] = entry
 
-        # Update access order
+        # Update access order (O(1) with OrderedDict)
+        # Only move_to_end if key exists; new keys already go to end
         if key in self._access_order:
-            self._access_order.remove(key)
-        self._access_order.append(key)
+            self._access_order.move_to_end(key)
+        else:
+            self._access_order[key] = None
 
     def invalidate(self, key: str) -> bool:
         """Remove a specific key from cache.
@@ -280,8 +281,7 @@ class ProductCache:
         """
         if key in self._cache:
             del self._cache[key]
-            if key in self._access_order:
-                self._access_order.remove(key)
+            self._access_order.pop(key, None)
             return True
         return False
 
@@ -304,8 +304,7 @@ class ProductCache:
         keys_to_remove = [k for k, e in self._cache.items() if e.source == source]
         for key in keys_to_remove:
             del self._cache[key]
-            if key in self._access_order:
-                self._access_order.remove(key)
+            self._access_order.pop(key, None)
         return len(keys_to_remove)
 
     def invalidate_by_category(self, category: str) -> int:
@@ -320,8 +319,7 @@ class ProductCache:
         keys_to_remove = [k for k, e in self._cache.items() if e.category == category]
         for key in keys_to_remove:
             del self._cache[key]
-            if key in self._access_order:
-                self._access_order.remove(key)
+            self._access_order.pop(key, None)
         return len(keys_to_remove)
 
     def invalidate_by_pattern(
@@ -360,8 +358,7 @@ class ProductCache:
         keys_to_remove = [k for k, e in self._cache.items() if matches(e)]
         for key in keys_to_remove:
             del self._cache[key]
-            if key in self._access_order:
-                self._access_order.remove(key)
+            self._access_order.pop(key, None)
         return len(keys_to_remove)
 
     # === Content State Tracking ===
@@ -477,6 +474,7 @@ class ProductCache:
             return None
         if time.monotonic() > entry.expires_at:
             del self._cache[key]
+            self._access_order.pop(key, None)
             return None
         return entry
 
@@ -631,13 +629,12 @@ class ProductCache:
         expired = [k for k, v in self._cache.items() if now > v.expires_at]
         for key in expired:
             del self._cache[key]
-            if key in self._access_order:
-                self._access_order.remove(key)
+            self._access_order.pop(key, None)
 
     def _evict_lru(self) -> None:
-        """Evict the least recently used entry."""
+        """Evict the least recently used entry (O(1) with OrderedDict)."""
         if self._access_order:
-            oldest_key = self._access_order.pop(0)
+            oldest_key, _ = self._access_order.popitem(last=False)
             if oldest_key in self._cache:
                 del self._cache[oldest_key]
 

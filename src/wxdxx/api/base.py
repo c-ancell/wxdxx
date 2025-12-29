@@ -2,11 +2,18 @@
 
 import asyncio
 import logging
+from importlib.metadata import version
 from typing import Any
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Get version dynamically from package metadata
+try:
+    _VERSION = version("wxdxx")
+except Exception:
+    _VERSION = "0.0.0"  # Fallback for development
 
 
 class BaseAPIClient:
@@ -32,8 +39,8 @@ class BaseAPIClient:
     TIMEOUT: float = 30.0
     DEFAULT_HEADERS: dict[str, str] = {}
 
-    # Shared User-Agent for all clients
-    USER_AGENT = "WxDXX/0.8.3 (https://github.com/c-ancell/wxdxx, wxdxxapp@gmail.com)"
+    # Shared User-Agent for all clients (version from package metadata)
+    USER_AGENT = f"WxDXX/{_VERSION} (https://github.com/c-ancell/wxdxx, wxdxxapp@gmail.com)"
 
     def __init__(self) -> None:
         headers = {"User-Agent": self.USER_AGENT}
