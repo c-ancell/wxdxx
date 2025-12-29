@@ -144,16 +144,27 @@ class SPCClient(BaseAPIClient):
         response.raise_for_status()
 
         text = self._extract_watch_text(response.text)
-        is_pds = "PARTICULARLY DANGEROUS SITUATION" in text.upper()
+        text_upper = text.upper()
+        is_pds = "PARTICULARLY DANGEROUS SITUATION" in text_upper
+
+        # Determine actual watch type from content
+        # Look for "TORNADO WATCH" or "SEVERE THUNDERSTORM WATCH" in text
+        if "TORNADO WATCH" in text_upper:
+            actual_type = WatchType.TORNADO
+        elif "SEVERE THUNDERSTORM WATCH" in text_upper:
+            actual_type = WatchType.SEVERE_THUNDERSTORM
+        else:
+            # Fallback to passed-in type if detection fails
+            actual_type = watch_type
 
         # Extract timestamps
         issued = parse_local_timestamp(text)
         expires = self._parse_watch_expires(text, issued)
 
-        logger.debug("Fetched watch %d: type=%s, is_pds=%s", number, watch_type.value, is_pds)
+        logger.debug("Fetched watch %d: type=%s, is_pds=%s", number, actual_type.value, is_pds)
         return Watch(
             number=number,
-            watch_type=watch_type,
+            watch_type=actual_type,
             text=text,
             is_pds=is_pds,
             issued=issued,
