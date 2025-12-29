@@ -74,6 +74,10 @@ ALERT_COLORS: dict[str, EventColor] = {
     "fog": EventColor("#708090", "#ffffff", "grey", "white"),
     # Special Weather Statement - moccasin
     "sps": EventColor("#ffe4b5", "#000000", "bright_yellow", "black"),
+    # Tornado Watch - red (distinct from Tornado Warning)
+    "toa": EventColor("#ff0000", "#ffffff", "red", "white"),
+    # Severe Thunderstorm Watch - dark goldenrod
+    "sva": EventColor("#b8860b", "#ffffff", "dark_goldenrod", "white"),
     # Generic fallbacks
     "warning": EventColor("#ff0000", "#ffffff", "red", "white"),
     "watch": EventColor("#ffa500", "#000000", "yellow", "black"),
@@ -184,9 +188,11 @@ def get_alert_css_class(event: str) -> str | None:
     if "tornado" in event_lower:
         if "warning" in event_lower:
             return "alert-tor"
-        return "alert-watch"  # Tornado Watch uses generic watch orange
+        return "alert-toa"  # Tornado Watch - red
     elif "severe thunderstorm" in event_lower:
-        return "alert-svr"
+        if "warning" in event_lower:
+            return "alert-svr"
+        return "alert-sva"  # Severe Thunderstorm Watch - dark goldenrod
     elif "flash flood" in event_lower:
         return "alert-ffw"
     elif "flood" in event_lower:
