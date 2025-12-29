@@ -145,10 +145,13 @@ class NWSClient(BaseAPIClient):
         return zone_ids
 
     async def get_zone_geometry(self, zone_id: str) -> ZoneGeometry | None:
-        """Get the geometry for a forecast zone.
+        """Get the geometry for a zone.
+
+        Tries multiple zone type endpoints (forecast, county, fire) since
+        alerts can reference different zone types.
 
         Args:
-            zone_id: Zone ID (e.g., "OKZ025", "TXZ001")
+            zone_id: Zone ID (e.g., "OKZ025", "TXZ001", "INC001")
 
         Returns:
             ZoneGeometry with polygon coordinates, or None if not found.
@@ -157,11 +160,22 @@ class NWSClient(BaseAPIClient):
         if zone_id in self._zone_geometry_cache:
             return self._zone_geometry_cache[zone_id]
 
+        # Try different zone type endpoints
+        data = None
+        zone_types = ["forecast", "county", "fire"]
+        for zone_type in zone_types:
+            try:
+                response = await self._get(f"/zones/{zone_type}/{zone_id}")
+                if response.status_code == 200:
+                    data = response.json()
+                    break
+            except Exception:
+                continue
+
+        if data is None:
+            return None
+
         try:
-            response = await self._get(f"/zones/forecast/{zone_id}")
-            if response.status_code != 200:
-                return None
-            data = response.json()
 
             # Extract geometry
             geometry = data.get("geometry", {})
