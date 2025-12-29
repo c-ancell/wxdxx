@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.17] - 2025-12-28
+
+### Added
+
+- Tornado and Severe Thunderstorm warnings now appear more frequently in news ticker (#30)
+- Alerts within 5 minutes of expiry now show dim strikethrough styling (#20)
+
+### Changed
+
+- Removed "in effect" text from news ticker headlines for brevity (#26)
+
+### Performance
+
+- Increased product list cache TTL from 2 to 5 minutes
+- Increased concurrent API request limit from 8 to 16
+- Zone data now pre-fetched in parallel with product fetches
+- SPS products cached during list fetch to avoid duplicate API calls
+
 ## [0.8.16] - 2025-12-28
 
 ### Fixed
