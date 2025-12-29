@@ -685,6 +685,11 @@ class NWSClient(BaseAPIClient):
 
             wind_direction = get_value("windDirection")
 
+            # Get raw METAR - NWS often returns empty, so fallback to Aviation Weather API
+            raw_metar = props.get("rawMessage") or ""
+            if not raw_metar.strip():
+                raw_metar = await self._fetch_raw_metar(station_id)
+
             return Observation(
                 station_id=station_id.upper(),
                 station_name=props.get("textDescription"),
@@ -701,11 +706,37 @@ class NWSClient(BaseAPIClient):
                 relative_humidity_pct=get_value("relativeHumidity"),
                 wind_chill_c=get_value("windChill"),
                 heat_index_c=get_value("heatIndex"),
-                raw_metar=props.get("rawMessage"),
+                raw_metar=raw_metar or None,
                 text_description=props.get("textDescription"),
             )
         except Exception:
             return None
+
+    async def _fetch_raw_metar(self, station_id: str) -> str | None:
+        """Fetch raw METAR from Aviation Weather API as fallback.
+
+        The NWS API often returns empty rawMessage for many stations.
+        The Aviation Weather API reliably provides raw METAR text.
+        """
+        try:
+            url = f"https://aviationweather.gov/api/data/metar?ids={station_id.upper()}&format=raw"
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(url)
+                if response.status_code == 200:
+                    text = response.text.strip()
+                    # Response may have multiple lines for SPECI, take first non-empty
+                    for line in text.split("\n"):
+                        line = line.strip()
+                        if line and line.startswith(station_id.upper()):
+                            return line
+                        # Also handle SPECI reports
+                        if line and line.startswith("SPECI"):
+                            return line
+                    # Return first line if no match
+                    return text.split("\n")[0].strip() if text else None
+        except Exception:
+            pass
+        return None
 
     async def get_zone_stations(self, zone_id: str) -> list[str]:
         """Get station IDs for stations in a forecast zone.
