@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.16] - 2025-12-28
+
+### Fixed
+
+- Loading indicator now shows immediately when selecting WFO products and alerts (#18)
+- Previously, old content remained visible during fetch with no user feedback
+
 ## [0.8.15] - 2025-12-28
 
 ### Fixed
