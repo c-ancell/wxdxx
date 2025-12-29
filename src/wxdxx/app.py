@@ -540,7 +540,7 @@ class WxDXX(App):
 
                 # Build headline text
                 wfo = alert.wfo or "NWS"
-                text = f"{wfo}: {alert.event} in effect until {expires_str}"
+                text = f"{wfo}: {alert.event} until {expires_str}"
 
                 headlines.append(
                     TickerHeadline(
