@@ -93,10 +93,13 @@ class NWSClient(BaseAPIClient):
             return None
 
     async def get_zone_wfo(self, zone_id: str) -> str:
-        """Get the WFO ID responsible for a forecast zone.
+        """Get the WFO ID responsible for a zone.
+
+        Tries multiple zone types (forecast, county, fire) since alerts
+        can reference different zone types.
 
         Args:
-            zone_id: Zone ID (e.g., "NVZ019", "OKZ025")
+            zone_id: Zone ID (e.g., "NVZ019", "OKZ025", "OKC025")
 
         Returns:
             WFO ID (e.g., "VEF", "OUN") or empty string if not found.
@@ -105,19 +108,22 @@ class NWSClient(BaseAPIClient):
         if zone_id in self._zone_wfo_cache:
             return self._zone_wfo_cache[zone_id]
 
-        try:
-            response = await self._get(f"/zones/forecast/{zone_id}")
-            if response.status_code != 200:
-                return ""
-            data = response.json()
-            props = data.get("properties", {})
-            cwa = props.get("cwa", [])
-            if cwa and isinstance(cwa, list):
-                wfo: str = str(cwa[0]).upper()
-                self._zone_wfo_cache[zone_id] = wfo
-                return wfo
-        except Exception:
-            pass
+        # Try different zone type endpoints
+        zone_types = ["forecast", "county", "fire"]
+        for zone_type in zone_types:
+            try:
+                response = await self._get(f"/zones/{zone_type}/{zone_id}")
+                if response.status_code != 200:
+                    continue
+                data = response.json()
+                props = data.get("properties", {})
+                cwa = props.get("cwa", [])
+                if cwa and isinstance(cwa, list):
+                    wfo: str = str(cwa[0]).upper()
+                    self._zone_wfo_cache[zone_id] = wfo
+                    return wfo
+            except Exception:
+                continue
 
         return ""
 
@@ -431,13 +437,12 @@ class NWSClient(BaseAPIClient):
 
             candidates.append((props, first_zone_id, zone_ids, sender_code, sender_name))
 
-        # Batch lookup WFOs for zones where senderCode is missing
-        # Only look up zones that don't already have a senderCode
-        zones_needing_lookup = [
-            first_zone
-            for _, first_zone, _, sender_code, _ in candidates
-            if first_zone and not sender_code
-        ]
+        # Batch lookup WFOs for ALL zones where senderCode is missing
+        # This allows fallback to other zones if first zone lookup fails
+        zones_needing_lookup: list[str] = []
+        for _, _, zone_ids, sender_code, _ in candidates:
+            if not sender_code:
+                zones_needing_lookup.extend(zone_ids)
         unique_zones = list(set(zones_needing_lookup))
         if unique_zones:
             wfo_results = await asyncio.gather(
@@ -452,9 +457,14 @@ class NWSClient(BaseAPIClient):
         seen_wfo_events: set[str] = set()
 
         for props, first_zone_id, zone_ids, sender_code, sender_name in candidates:
-            # Use senderCode as primary WFO source (more reliable)
-            # Fall back to zone lookup if senderCode unavailable
-            wfo = sender_code or zone_to_wfo.get(first_zone_id, "")
+            # Use senderCode as primary WFO source (most reliable)
+            wfo = sender_code
+            # Fall back to zone lookup - try each zone until we find a WFO
+            if not wfo:
+                for zone_id in zone_ids:
+                    wfo = zone_to_wfo.get(zone_id, "")
+                    if wfo:
+                        break
             event = props.get("event", "")
 
             # Only deduplicate by WFO+event if we have a valid WFO
