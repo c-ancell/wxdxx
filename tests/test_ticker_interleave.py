@@ -1,11 +1,11 @@
-"""Tests for news ticker headline interleaving."""
+"""Tests for news ticker headline interleaving and styling."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from wxdxx.app import WxDXX
-from wxdxx.widgets.news_ticker import TickerHeadline
+from wxdxx.widgets.news_ticker import NewsTicker, TickerHeadline
 
 
 def make_headline(id: str, event_type: str, source: str = "nws") -> TickerHeadline:
@@ -136,3 +136,73 @@ class TestInterleaveHighPriorityHeadlines:
         # SPC TOR watch should also be duplicated
         tor_count = sum(1 for h in result if h.event_type == "TOR")
         assert tor_count >= 2
+
+
+class TestExpiringHeadlineStyle:
+    """Tests for expiring-soon headline styling."""
+
+    def test_headline_not_expiring_soon(self) -> None:
+        """Headlines with >5 minutes remaining are not marked as expiring."""
+        ticker = NewsTicker()
+        now = datetime.now(timezone.utc)
+        headline = TickerHeadline(
+            id="test",
+            text="Test warning",
+            event_type="TOR",
+            source="nws",
+            expires=now + timedelta(minutes=10),
+        )
+        assert not ticker._is_expiring_soon(headline)
+
+    def test_headline_expiring_within_5_minutes(self) -> None:
+        """Headlines within 5 minutes of expiry are marked as expiring."""
+        ticker = NewsTicker()
+        now = datetime.now(timezone.utc)
+        headline = TickerHeadline(
+            id="test",
+            text="Test warning",
+            event_type="TOR",
+            source="nws",
+            expires=now + timedelta(minutes=3),
+        )
+        assert ticker._is_expiring_soon(headline)
+
+    def test_headline_expiring_at_threshold(self) -> None:
+        """Headlines exactly at the 5-minute threshold are marked as expiring."""
+        ticker = NewsTicker()
+        now = datetime.now(timezone.utc)
+        headline = TickerHeadline(
+            id="test",
+            text="Test warning",
+            event_type="TOR",
+            source="nws",
+            expires=now + timedelta(minutes=5),
+        )
+        assert ticker._is_expiring_soon(headline)
+
+    def test_headline_no_expiry_not_marked(self) -> None:
+        """Headlines without expiry time are not marked as expiring."""
+        ticker = NewsTicker()
+        headline = TickerHeadline(
+            id="test",
+            text="Test warning",
+            event_type="TOR",
+            source="nws",
+            expires=None,
+        )
+        assert not ticker._is_expiring_soon(headline)
+
+    def test_expiring_headline_gets_dim_strike_style(self) -> None:
+        """Expiring headlines get dim strikethrough style."""
+        ticker = NewsTicker()
+        now = datetime.now(timezone.utc)
+        headline = TickerHeadline(
+            id="test",
+            text="Test warning",
+            event_type="TOR",
+            source="nws",
+            expires=now + timedelta(minutes=2),
+            appearance_count=5,  # Would normally get regular style
+        )
+        style = ticker._get_headline_style(headline)
+        assert style == "dim strike"

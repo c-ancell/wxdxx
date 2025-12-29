@@ -1,7 +1,7 @@
 """Scrolling news ticker widget for nationwide weather alerts."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from rich.console import RenderableType
 from rich.text import Text
@@ -50,6 +50,7 @@ class NewsTicker(Widget):
     FLASH_INTERVAL = 0.3  # Seconds between flash toggles for first-cycle headlines
     SEPARATOR = " *** "
     NEW_THRESHOLD_APPEARANCES = 2  # Show "NEW" styling for this many full scrolls
+    EXPIRY_WARNING_MINUTES = 5  # Show dim style when within this many minutes of expiry
 
     def __init__(
         self,
@@ -365,14 +366,31 @@ class NewsTicker(Widget):
             return f"***{prefix}: {headline.text}***"
         return headline.text
 
+    def _is_expiring_soon(self, headline: TickerHeadline) -> bool:
+        """Check if a headline is within the expiry warning threshold.
+
+        Returns:
+            True if the headline expires within EXPIRY_WARNING_MINUTES minutes.
+        """
+        if headline.expires is None:
+            return False
+        now = datetime.now(timezone.utc)
+        threshold = timedelta(minutes=self.EXPIRY_WARNING_MINUTES)
+        return headline.expires - now <= threshold
+
     def _get_headline_style(self, headline: TickerHeadline) -> str:
         """Get the Rich style string for a headline.
 
         Visual states based on appearance count:
+        - Expiring soon: Dim style (within 5 minutes of expiry)
         - First cycle (count 0): Flash - alternates between solid bg and inverse
         - Second cycle (count 1): Solid background color
         - Regular (count 2+): Foreground text color only
         """
+        # Check if expiring soon - override other styles with dim
+        if self._is_expiring_soon(headline):
+            return "dim strike"
+
         event_key = headline.event_type
         if headline.source == "spc":
             event_key = f"SPC_{headline.event_type}"
