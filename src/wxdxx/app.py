@@ -611,8 +611,74 @@ class WxDXX(App):
 
         headlines.sort(key=get_priority)
 
+        # Interleave TOR and SVR headlines so they appear more frequently
+        headlines = self._interleave_high_priority_headlines(headlines)
+
         # Update ticker with headlines
         ticker.update_headlines(headlines)
+
+    def _interleave_high_priority_headlines(
+        self, headlines: list[TickerHeadline]
+    ) -> list[TickerHeadline]:
+        """Interleave TOR and SVR headlines so they appear more frequently.
+
+        High-priority warnings (TOR, SVR) are inserted periodically throughout
+        the ticker so users see them more often during a full scroll cycle.
+
+        Strategy: Insert a copy of each high-priority headline every N headlines,
+        where N is the interleave interval. Duplicates get unique IDs to allow
+        proper tracking in the ticker widget.
+        """
+        if not headlines:
+            return headlines
+
+        # Identify high-priority headlines (TOR and SVR only)
+        high_priority = [h for h in headlines if h.event_type in ("TOR", "SVR")]
+        if not high_priority:
+            return headlines
+
+        # Interleave interval: insert high-priority headlines every N items
+        # Lower number = more frequent appearances
+        interleave_interval = 4
+
+        # Start with original sorted list
+        result = list(headlines)
+
+        # Calculate how many copies to add based on total headlines
+        # Each high-priority headline gets inserted once every interleave_interval positions
+        total_len = len(headlines)
+        if total_len <= interleave_interval:
+            return headlines  # Not enough headlines to warrant interleaving
+
+        # Track insertion positions - spread duplicates throughout the list
+        insert_positions = []
+        pos = interleave_interval
+        hp_index = 0
+        while pos < total_len + len(insert_positions):
+            insert_positions.append((pos, high_priority[hp_index % len(high_priority)]))
+            hp_index += 1
+            pos += interleave_interval
+
+        # Insert duplicates with unique IDs (reverse order to preserve positions)
+        for pos, headline in reversed(insert_positions):
+            # Create a copy with a unique ID for the duplicate
+            duplicate = TickerHeadline(
+                id=f"{headline.id}-dup-{pos}",
+                text=headline.text,
+                event_type=headline.event_type,
+                source=headline.source,
+                wfo=headline.wfo,
+                is_new=headline.is_new,
+                is_update=headline.is_update,
+                appearance_count=headline.appearance_count,
+                first_seen=headline.first_seen,
+                expires=headline.expires,
+            )
+            # Insert at the calculated position (clamped to valid range)
+            insert_idx = min(pos, len(result))
+            result.insert(insert_idx, duplicate)
+
+        return result
 
     async def on_unmount(self) -> None:
         """Clean up when app closes."""
