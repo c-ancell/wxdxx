@@ -453,13 +453,8 @@ class NWSClient(BaseAPIClient):
 
         for props, first_zone_id, zone_ids, sender_code, sender_name in candidates:
             # Use senderCode as primary WFO source (more reliable)
-            # Fall back to zone lookup, then senderName parsing
+            # Fall back to zone lookup if senderCode unavailable
             wfo = sender_code or zone_to_wfo.get(first_zone_id, "")
-            if not wfo and sender_name and "NWS " in sender_name:
-                # Last resort: parse WFO from senderName (e.g., "NWS Norman OK")
-                parts = sender_name.replace("NWS ", "").split()
-                if parts:
-                    wfo = parts[0][:3].upper()
             event = props.get("event", "")
 
             # Only deduplicate by WFO+event if we have a valid WFO
@@ -550,20 +545,9 @@ class NWSClient(BaseAPIClient):
                     continue
                 seen_ids.add(alert_id)
 
-                # Extract WFO from sender (format: "NWS Norman OK")
-                sender = props.get("senderName", "")
-                wfo = ""
-                if "NWS " in sender:
-                    # Try to extract WFO code from the response
-                    # senderCode is more reliable if available
-                    sender_code = props.get("senderCode", "")
-                    if sender_code:
-                        wfo = sender_code.upper()
-                    else:
-                        # Fallback: extract from sender name
-                        parts = sender.replace("NWS ", "").split()
-                        if parts:
-                            wfo = parts[0][:3].upper()
+                # Extract WFO from senderCode (most reliable source)
+                sender_code = props.get("senderCode", "")
+                wfo = sender_code.upper() if sender_code else ""
 
                 # Parse severity and urgency
                 severity_str = props.get("severity", "Unknown")
